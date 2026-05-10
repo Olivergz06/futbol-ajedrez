@@ -6,11 +6,12 @@
 <title>Futbol Ajedrez</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:#0a1628;font-family:monospace;color:white;overflow-x:auto;touch-action:pan-x pan-y}
-button{font-family:monospace;cursor:pointer;outline:none}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a1628;font-family:monospace;color:white;overflow-x:auto}
+button{font-family:monospace;cursor:pointer;outline:none;-webkit-tap-highlight-color:transparent}
 input{font-family:monospace;outline:none;color:white}
-#game-grid{touch-action:none}
+body{-webkit-overflow-scrolling:touch}
+@media(max-width:600px){body{font-size:11px}}
 </style>
 </head>
 <body>
@@ -39,7 +40,16 @@ const FMTS=[
   {label:"2-2-2",T:2,C:2,R:2},{label:"2-1-3",T:2,C:1,R:3},
   {label:"1-3-2",T:1,C:3,R:2},{label:"1-2-3",T:1,C:2,R:3},
 ];
-const CS=42;
+const isPortrait=()=>window.innerHeight>window.innerWidth;
+const CS=(()=>{
+  const maxW=Math.min(window.innerWidth,window.screen.width);
+  const maxH=window.innerHeight;
+  const availW=isPortrait()?maxW-8:maxW-175;
+  const availH=maxH-60;
+  const byW=Math.floor(availW/COLS);
+  const byH=Math.floor(availH/ROWS);
+  return Math.max(24,Math.min(byW,byH,44));
+})();
 
 // ── Utilidades ────────────────────────────────────────────────────────────────
 const inB=(r,c)=>r>=0&&r<ROWS&&c>=0&&c<COLS;
@@ -75,7 +85,7 @@ function defaultPieces(fm,team,kw){
 }
 function buildAll(fA,fB,kw){return[...defaultPieces(fA,TA,kw),...defaultPieces(fB,TB,kw)];}
 
-// ── Lógica de movimiento ──────────────────────────────────────────────────────
+// ── Movimiento ────────────────────────────────────────────────────────────────
 function getMoves(piece,pieces,advUsed,ball){
   const{type,team,row,col,hasBall}=piece;const moves=[];
   if(type==="C"){
@@ -94,8 +104,7 @@ function getMoves(piece,pieces,advUsed,ball){
       if(pb)continue;
       let sp=false;
       if(ball){
-        const br=ball.row,bc=ball.col;
-        const bp=pat(pieces,br,bc);
+        const br=ball.row,bc=ball.col;const bp=pat(pieces,br,bc);
         if(!bp||bp.team!==team){
           for(let s=1;s<=adr&&!sp;s++)if(br===row+sdr*s&&bc===col)sp=true;
           for(let s=1;s<adc&&!sp;s++)if(br===row+dr&&bc===col+sdc*s)sp=true;
@@ -233,44 +242,39 @@ const G={
   score:{A:0,B:0},over:false,
   sel:null,moves:[],shots:[],clickCt:0,adv:0,bonus:false,
   stealerId:null,stealerDir:{dr:1,dc:0},
-  log:["Bienvenido a Futbol Ajedrez"],history:[],
+  log:["Bienvenido a Futbol Ajedrez"],
   repoPieces:null,repoKickTeam:null,placementPieces:null,
-  // Online
   roomCode:null,myTeam:null,onlineChannel:null,
 };
 
 function addLog(msg){G.log=[msg,...G.log].slice(0,30);}
-function saveHistory(){G.history=[...G.history,{pieces:JSON.parse(JSON.stringify(G.pieces)),ball:{...G.ball},curTeam:G.curTeam,score:{...G.score},adv:G.adv}].slice(-20);}
 
 function render(){
   const root=document.getElementById("root");root.innerHTML="";
   if(G.phase==="LOBBY")root.appendChild(renderLobby());
-  else if(G.phase==="COACH_A"||G.phase==="COACH_B")root.appendChild(renderCoach(G.phase==="COACH_A"?TA:TB));
   else if(G.phase==="ONLINE_COACH")root.appendChild(renderCoach(G.myTeam,true));
   else if(G.phase==="ONLINE_WAIT_FM")root.appendChild(renderWaiting("Esperando formacion del rival..."));
-  else if(G.phase==="PLACE"||G.phase==="REPO")root.appendChild(renderPlacement());
   else if(G.phase==="ONLINE_PLACE")root.appendChild(renderOnlinePlacement());
   else if(G.phase==="ONLINE_WAIT_PLACE")root.appendChild(renderWaiting("Esperando que el rival coloque sus piezas..."));
-  else if(G.phase==="GAME")root.appendChild(renderGame());
-  else if(G.phase==="ONLINE_GAME")root.appendChild(renderOnlineGame());
+  else if(G.phase==="ONLINE_GAME")root.appendChild(renderGame());
 }
 
-// ── PANTALLA LOBBY ────────────────────────────────────────────────────────────
+// ── LOBBY ─────────────────────────────────────────────────────────────────────
 function renderLobby(){
   const screen=mkD({minHeight:"100vh",background:"#0a1628",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"});
-  const card=mkD({background:"#0f1c2e",border:"2px solid #7c3aed",borderRadius:"18px",padding:"32px 36px",width:"380px",boxShadow:"0 0 60px rgba(124,58,237,0.2)"});
-  const emoji=mkD({fontSize:"36px",textAlign:"center",marginBottom:"6px"});emoji.textContent="🌐";card.appendChild(emoji);
-  card.appendChild(mkT("ONLINE",{fontSize:"22px",fontWeight:"900",color:"white",letterSpacing:"2px",textAlign:"center"}));
-  card.appendChild(mkT("MULTIJUGADOR EN LINEA",{fontSize:"10px",color:"#6b7280",marginTop:"4px",marginBottom:"28px",letterSpacing:"3px",textAlign:"center"}));
+  const card=mkD({background:"#0f1c2e",border:"2px solid #7c3aed",borderRadius:"18px",padding:"32px 36px",maxWidth:"380px",width:"100%",boxShadow:"0 0 60px rgba(124,58,237,0.2)"});
+
+  const emoji=mkD({fontSize:"48px",textAlign:"center",marginBottom:"8px"});emoji.textContent="⚽";card.appendChild(emoji);
+  card.appendChild(mkT("FUTBOL AJEDREZ",{fontSize:"24px",fontWeight:"900",color:"white",letterSpacing:"2px",textAlign:"center"}));
+  card.appendChild(mkT("MULTIJUGADOR EN LINEA",{fontSize:"10px",color:"#7c3aed",marginTop:"4px",marginBottom:"28px",letterSpacing:"3px",textAlign:"center"}));
 
   const statusDiv=mkD({fontSize:"10px",textAlign:"center",padding:"8px",borderRadius:"8px",marginBottom:"8px",minHeight:"20px"});
-  let lobbyMode=null;
+  const btnsDiv=mkD({display:"flex",flexDirection:"column",gap:"12px"});
 
-  const btnsDiv=mkD({display:"flex",flexDirection:"column",gap:"10px"});
-
+  // CREAR SALA
   const btnCreate=document.createElement("button");
   btnCreate.textContent="➕ CREAR SALA";
-  btnCreate.style.cssText="background:linear-gradient(135deg,#065f46,#022c22);border:2px solid #10b981;border-radius:12px;color:white;padding:16px;cursor:pointer;font-family:monospace;font-size:13px;font-weight:900;letter-spacing:2px";
+  btnCreate.style.cssText="background:linear-gradient(135deg,#065f46,#022c22);border:2px solid #10b981;border-radius:12px;color:white;padding:18px;cursor:pointer;font-family:monospace;font-size:14px;font-weight:900;letter-spacing:2px;width:100%";
   btnCreate.onclick=async()=>{
     btnCreate.disabled=true;btnCreate.textContent="Creando...";
     statusDiv.textContent="Generando sala...";statusDiv.style.color="#6ee7b7";
@@ -281,60 +285,51 @@ function renderLobby(){
     // Mostrar código
     btnsDiv.innerHTML="";
     const codeBox=mkD({textAlign:"center"});
-    codeBox.appendChild(mkT("CODIGO DE SALA",{fontSize:"10px",color:"#6b7280",marginBottom:"8px"}));
-    const codeDisplay=mkD({fontSize:"36px",fontWeight:"900",color:"#10b981",letterSpacing:"8px",background:"#052e16",border:"2px solid #10b981",borderRadius:"12px",padding:"16px",marginBottom:"12px",textAlign:"center"});
+    codeBox.appendChild(mkT("CODIGO DE SALA",{fontSize:"10px",color:"#6b7280",marginBottom:"8px",letterSpacing:"2px"}));
+    const codeDisplay=mkD({fontSize:"40px",fontWeight:"900",color:"#10b981",letterSpacing:"10px",background:"#052e16",border:"2px solid #10b981",borderRadius:"12px",padding:"18px",marginBottom:"12px",textAlign:"center"});
     codeDisplay.textContent=code;codeBox.appendChild(codeDisplay);
-    codeBox.appendChild(mkT("Comparte este codigo con tu rival",{fontSize:"10px",color:"#9ca3af",marginBottom:"12px",textAlign:"center"}));
+    codeBox.appendChild(mkT("Comparte este codigo con tu rival",{fontSize:"10px",color:"#9ca3af",marginBottom:"12px",textAlign:"center",display:"block"}));
     const btnCopy=document.createElement("button");
-    btnCopy.textContent="📋 Copiar codigo";
-    btnCopy.style.cssText="background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;padding:8px 16px;cursor:pointer;font-family:monospace;font-size:10px;margin-bottom:12px";
+    btnCopy.textContent="📋 Copiar";
+    btnCopy.style.cssText="background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;padding:10px 20px;cursor:pointer;font-family:monospace;font-size:11px;margin-bottom:16px";
     btnCopy.onclick=()=>{navigator.clipboard.writeText(code);btnCopy.textContent="✅ Copiado!";};
     codeBox.appendChild(btnCopy);
     btnsDiv.appendChild(codeBox);
     statusDiv.textContent="⏳ Esperando rival...";statusDiv.style.color="#6ee7b7";
     G.roomCode=code;G.myTeam=TA;
-    // Suscribirse para detectar cuando entra el rival
     const ch=sb.channel("lobby:"+code)
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"rooms",filter:"id=eq."+code},payload=>{
-        if(payload.new.status==="ready"){
-          ch.unsubscribe();
-          G.phase="ONLINE_COACH";render();
-        }
+        if(payload.new.status==="ready"){ch.unsubscribe();G.phase="ONLINE_COACH";render();}
       }).subscribe();
   };
   btnsDiv.appendChild(btnCreate);
 
-  const joinDiv=mkD({display:"flex",flexDirection:"column",gap:"8px"});
-  joinDiv.appendChild(mkT("CODIGO DE SALA",{fontSize:"10px",color:"#6b7280",marginBottom:"2px"}));
+  // UNIRSE
+  const sep=mkD({textAlign:"center",color:"#374151",fontSize:"11px",padding:"4px 0"});sep.textContent="— o —";
+  btnsDiv.appendChild(sep);
+
+  btnsDiv.appendChild(mkT("CODIGO DE SALA",{fontSize:"10px",color:"#6b7280",letterSpacing:"2px"}));
   const inp=document.createElement("input");
   inp.placeholder="XXXXXX";inp.maxLength=6;
-  inp.style.cssText="width:100%;background:#111827;border:2px solid #374151;border-radius:10px;padding:12px 14px;font-size:20px;font-weight:900;letter-spacing:6px;text-align:center;text-transform:uppercase";
+  inp.style.cssText="width:100%;background:#111827;border:2px solid #374151;border-radius:10px;padding:14px;font-size:24px;font-weight:900;letter-spacing:8px;text-align:center;text-transform:uppercase;margin-bottom:4px";
   inp.oninput=()=>{inp.value=inp.value.toUpperCase();};
-  joinDiv.appendChild(inp);
+  btnsDiv.appendChild(inp);
 
   const btnJoin=document.createElement("button");
-  btnJoin.textContent="🚀 UNIRSE";
-  btnJoin.style.cssText="background:linear-gradient(135deg,#1e3a5f,#0a1628);border:2px solid #3b82f6;border-radius:12px;color:white;padding:14px;cursor:pointer;font-family:monospace;font-size:13px;font-weight:900";
+  btnJoin.textContent="🚀 UNIRSE A SALA";
+  btnJoin.style.cssText="background:linear-gradient(135deg,#1e3a5f,#0a1628);border:2px solid #3b82f6;border-radius:12px;color:white;padding:16px;cursor:pointer;font-family:monospace;font-size:13px;font-weight:900;letter-spacing:2px;width:100%";
   btnJoin.onclick=async()=>{
     const code=inp.value.trim().toUpperCase();
-    if(!code){statusDiv.textContent="Ingresa un codigo.";statusDiv.style.color="#ef4444";return;}
-    btnJoin.disabled=true;btnJoin.textContent="Buscando...";
-    statusDiv.textContent="";
+    if(code.length<4){statusDiv.textContent="Ingresa un codigo valido.";statusDiv.style.color="#ef4444";return;}
+    btnJoin.disabled=true;btnJoin.textContent="Buscando...";statusDiv.textContent="";
     const{data,error}=await sb.from("rooms").select("*").eq("id",code).single();
-    if(error||!data){statusDiv.textContent="Sala no encontrada.";statusDiv.style.color="#ef4444";btnJoin.disabled=false;btnJoin.textContent="🚀 UNIRSE";return;}
-    if(data.status!=="waiting"){statusDiv.textContent="La sala ya está en juego.";statusDiv.style.color="#ef4444";btnJoin.disabled=false;btnJoin.textContent="🚀 UNIRSE";return;}
+    if(error||!data){statusDiv.textContent="Sala no encontrada.";statusDiv.style.color="#ef4444";btnJoin.disabled=false;btnJoin.textContent="🚀 UNIRSE A SALA";return;}
+    if(data.status!=="waiting"){statusDiv.textContent="La sala ya esta en juego.";statusDiv.style.color="#ef4444";btnJoin.disabled=false;btnJoin.textContent="🚀 UNIRSE A SALA";return;}
     await sb.from("rooms").update({player_b:"B",status:"ready"}).eq("id",code);
     G.roomCode=code;G.myTeam=TB;
     G.phase="ONLINE_COACH";render();
   };
-  joinDiv.appendChild(btnJoin);
-  btnsDiv.appendChild(joinDiv);
-
-  const btnBack=document.createElement("button");
-  btnBack.textContent="← Volver";
-  btnBack.style.cssText="background:transparent;border:1px solid #374151;border-radius:10px;color:#6b7280;padding:10px;cursor:pointer;font-family:monospace;font-size:11px";
-  btnBack.onclick=()=>{location.reload();};
-  btnsDiv.appendChild(btnBack);
+  btnsDiv.appendChild(btnJoin);
 
   card.appendChild(statusDiv);
   card.appendChild(btnsDiv);
@@ -346,18 +341,17 @@ function renderWaiting(msg){
   const screen=mkD({minHeight:"100vh",background:"#0a1628",display:"flex",alignItems:"center",justifyContent:"center"});
   const card=mkD({background:"#0f1c2e",border:"2px solid #7c3aed",borderRadius:"18px",padding:"40px",textAlign:"center",maxWidth:"380px"});
   const emoji=mkD({fontSize:"40px",marginBottom:"12px"});emoji.textContent="⏳";card.appendChild(emoji);
-  card.appendChild(mkT(msg,{fontSize:"16px",fontWeight:"900",color:"white",marginBottom:"8px"}));
-  card.appendChild(mkT("Sala: "+G.roomCode,{fontSize:"10px",color:"#7c3aed",fontWeight:"900",letterSpacing:"3px",marginBottom:"8px"}));
-  card.appendChild(mkT("Eres el Equipo "+G.myTeam+(G.myTeam===TA?" (Azul · arriba)":" (Rojo · abajo)"),{fontSize:"10px",color:"#9ca3af"}));
-  const screen2=mkD({minHeight:"100vh",background:"#0a1628",display:"flex",alignItems:"center",justifyContent:"center"});
-  screen2.appendChild(card);return screen2;
+  card.appendChild(mkT(msg,{fontSize:"15px",fontWeight:"900",color:"white",marginBottom:"12px",display:"block"}));
+  card.appendChild(mkT("Sala: "+G.roomCode,{fontSize:"13px",color:"#7c3aed",fontWeight:"900",letterSpacing:"4px",display:"block",marginBottom:"8px"}));
+  card.appendChild(mkT("Eres Equipo "+G.myTeam+(G.myTeam===TA?" · Azul (arriba)":" · Rojo (abajo)"),{fontSize:"10px",color:"#9ca3af",display:"block"}));
+  screen.appendChild(card);return screen;
 }
 
-// ── PANTALLA COACH ────────────────────────────────────────────────────────────
+// ── COACH ─────────────────────────────────────────────────────────────────────
 function renderCoach(team,isOnline=false){
   const tc=team===TA?"#3b82f6":"#ef4444";
   const screen=mkD({minHeight:"100vh",background:"#0a1628",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"});
-  const card=mkD({background:"#0f1c2e",border:`2px solid ${tc}`,borderRadius:"18px",padding:"28px 32px",width:"480px",boxShadow:`0 0 50px ${tc}33`});
+  const card=mkD({background:"#0f1c2e",border:`2px solid ${tc}`,borderRadius:"18px",padding:"28px 32px",maxWidth:"480px",width:"100%",boxShadow:`0 0 50px ${tc}33`});
   card.appendChild(mkT("DIRECTOR TECNICO",{fontSize:"9px",color:"#4b5563",letterSpacing:"5px",textAlign:"center"}));
   card.appendChild(mkT("EQUIPO "+team,{fontSize:"28px",fontWeight:"900",color:tc,letterSpacing:"2px",textAlign:"center",marginTop:"6px"}));
   card.appendChild(mkT("Torres - Caballos - Reynas",{fontSize:"10px",color:"#6b7280",textAlign:"center",marginTop:"4px",marginBottom:"20px"}));
@@ -365,17 +359,18 @@ function renderCoach(team,isOnline=false){
   let sel=null;const cards=[];
   FMTS.forEach(fm=>{
     const c2=mkD({background:"#111827",border:"2px solid #1f2937",borderRadius:"12px",padding:"12px 14px",cursor:"pointer",position:"relative"});
-    c2.appendChild(mkT(fm.label,{fontSize:"20px",fontWeight:"900",color:"#9ca3af",marginBottom:"6px",className:"lbl"}));
+    const lbl=mkD({fontSize:"20px",fontWeight:"900",color:"#9ca3af",marginBottom:"6px"});lbl.textContent=fm.label;lbl.className="lbl";
+    c2.appendChild(lbl);
     [{t:"T",n:fm.T,c:"#60a5fa",sh:"2px"},{t:"C",n:fm.C,c:"#34d399",sh:"50%"},{t:"R",n:fm.R,c:"#f87171",sh:"4px"}].forEach(({t,n,c,sh})=>{
-      const row2=mkD({display:"flex",alignItems:"center",gap:"4px"});
-      row2.appendChild(mkT(t,{fontSize:"8px",color:"#6b7280",width:"8px"}));
-      for(let i=0;i<n;i++){const dot=mkD({width:"10px",height:"10px",borderRadius:sh,background:c+"55",border:`1px solid ${c}88`});row2.appendChild(dot);}
-      c2.appendChild(row2);
+      const row=mkD({display:"flex",alignItems:"center",gap:"4px"});
+      row.appendChild(mkT(t,{fontSize:"8px",color:"#6b7280",width:"8px"}));
+      for(let i=0;i<n;i++){const dot=mkD({width:"10px",height:"10px",borderRadius:sh,background:c+"55",border:`1px solid ${c}88`});row.appendChild(dot);}
+      c2.appendChild(row);
     });
     c2.addEventListener("click",()=>{
       sel=fm;
-      cards.forEach(x=>{x.style.border="2px solid #1f2937";x.style.background="#111827";x.firstChild.style.color="#9ca3af";});
-      c2.style.border=`2px solid ${tc}`;c2.style.background=tc+"22";c2.firstChild.style.color=tc;
+      cards.forEach(x=>{x.style.border="2px solid #1f2937";x.style.background="#111827";x.querySelector(".lbl").style.color="#9ca3af";});
+      c2.style.border=`2px solid ${tc}`;c2.style.background=tc+"22";c2.querySelector(".lbl").style.color=tc;
       confirmBtn.style.background=tc+"22";confirmBtn.style.borderColor=tc;confirmBtn.style.color="white";
       confirmBtn.textContent="CONFIRMAR "+fm.label;
     });
@@ -387,128 +382,44 @@ function renderCoach(team,isOnline=false){
   confirmBtn.style.cssText=`width:100%;padding:12px;background:#111827;border:2px solid #1f2937;border-radius:12px;color:#4b5563;font-size:13px;font-weight:900;cursor:not-allowed;font-family:monospace;letter-spacing:3px`;
   confirmBtn.addEventListener("click",async()=>{
     if(!sel)return;
-    if(isOnline){
-      // Guardar formacion en Supabase
-      const teamKey=G.myTeam===TA?"fmA":"fmB";
-      const{data}=await sb.from("game_state").select("state").eq("room_id",G.roomCode).single();
-      const prev=data?.state||{};
-      const newState={...prev,[teamKey]:sel};
-      await sb.from("game_state").upsert({room_id:G.roomCode,state:newState,updated_at:new Date().toISOString()});
-      const otherKey=G.myTeam===TA?"fmB":"fmA";
-      if(prev[otherKey]){
-        G.fmA=newState.fmA;G.fmB=newState.fmB;
-        G.phase="ONLINE_PLACE";render();
-      } else {
-        G.phase="ONLINE_WAIT_FM";render();
-        // Suscribirse
-        const ch=sb.channel("fm:"+G.roomCode)
-          .on("postgres_changes",{event:"*",schema:"public",table:"game_state",filter:"room_id=eq."+G.roomCode},payload=>{
-            const s=payload.new?.state;
-            if(!s)return;
-            const ok=G.myTeam===TA?"fmB":"fmA";
-            if(s[ok]){
-              ch.unsubscribe();
-              G.fmA=s.fmA;G.fmB=s.fmB;
-              G.phase="ONLINE_PLACE";render();
-            }
-          }).subscribe();
-      }
+    const teamKey=G.myTeam===TA?"fmA":"fmB";
+    const otherKey=G.myTeam===TA?"fmB":"fmA";
+    confirmBtn.disabled=true;confirmBtn.textContent="Enviando...";
+    const{data}=await sb.from("game_state").select("state").eq("room_id",G.roomCode).single();
+    const prev=data?.state||{};
+    const newState={...prev,[teamKey]:sel};
+    await sb.from("game_state").upsert({room_id:G.roomCode,state:newState,updated_at:new Date().toISOString()});
+    if(prev[otherKey]){
+      G.fmA=newState.fmA;G.fmB=newState.fmB;
+      G.phase="ONLINE_PLACE";render();
     } else {
-      if(team===TA){G.fmA=sel;G.phase="COACH_B";}
-      else{G.fmB=sel;G.phase="PLACE";G.placementPieces=buildAll(G.fmA,G.fmB,TA);}
-      render();
+      G.phase="ONLINE_WAIT_FM";render();
+      const ch=sb.channel("fm:"+G.roomCode)
+        .on("postgres_changes",{event:"*",schema:"public",table:"game_state",filter:"room_id=eq."+G.roomCode},payload=>{
+          const s=payload.new?.state;
+          if(!s)return;
+          if(s[otherKey]){ch.unsubscribe();G.fmA=s.fmA;G.fmB=s.fmB;G.phase="ONLINE_PLACE";render();}
+        }).subscribe();
     }
   });
   card.appendChild(confirmBtn);screen.appendChild(card);return screen;
 }
 
-// ── PLACEMENT LOCAL ───────────────────────────────────────────────────────────
-function renderPlacement(){
-  const kw=G.phase==="REPO"?G.repoKickTeam:TA;
-  let pieces=G.phase==="REPO"?G.repoPieces:(G.placementPieces||buildAll(G.fmA,G.fmB,kw));
-  let drag=null;
-  const wrap=mkD({minHeight:"100vh",background:"#0a1628",display:"flex",gap:"12px",padding:"12px",overflowX:"auto",alignItems:"flex-start"});
-  const side=mkD({display:"flex",flexDirection:"column",gap:"10px",minWidth:"200px"});
-  const info=mkD({background:"#0f1c2e",border:"2px solid #374151",borderRadius:"12px",padding:"14px 16px"});
-  info.appendChild(mkT("COLOCACION",{fontSize:"9px",color:"#4b5563",letterSpacing:"3px",marginBottom:"6px"}));
-  info.appendChild(mkT("Haz click en una pieza y luego en la celda destino.",{fontSize:"10px",color:"#9ca3af",lineHeight:"1.8"}));
-  info.appendChild(mkT("La Reyna del saque esta fija en el centro.",{fontSize:"9px",color:"#fbbf24"}));
-  side.appendChild(info);
-  const startBtn=document.createElement("button");
-  startBtn.textContent="COMENZAR";
-  startBtn.style.cssText="width:100%;padding:12px;background:#064e3b;border:2px solid #10b981;border-radius:12px;color:white;font-size:12px;font-weight:900;cursor:pointer;font-family:monospace;letter-spacing:3px";
-  startBtn.onclick=()=>{
-    G.pieces=JSON.parse(JSON.stringify(pieces));
-    G.ball={row:CY,col:CX};G.curTeam=kw;G.kickoff=true;
-    G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;G.bonus=false;G.stealerId=null;G.adv=0;
-    if(G.phase!=="REPO"){G.score={A:0,B:0};G.log=["Equipo "+kw+" saca."];}
-    else{addLog("Equipo "+kw+" saca!");}
-    G.phase="GAME";render();
-  };
-  side.appendChild(startBtn);wrap.appendChild(side);
-  const fw=mkD({display:"flex",flexDirection:"column"});
-  const fr=mkD({display:"flex"});
-  const fc=mkD({position:"relative",border:"3px solid #1f6b3d",borderRadius:"4px",overflow:"hidden",boxShadow:"0 0 30px rgba(0,150,60,0.3)"});
-  fc.appendChild(makeSVG());
-  const grid=document.createElement("div");
-  grid.style.cssText=`display:grid;grid-template-columns:repeat(${COLS},${CS}px);grid-template-rows:repeat(${ROWS},${CS}px);position:relative;z-index:2`;
-  function drawPlacement(){
-    grid.innerHTML="";
-    for(let r=0;r<ROWS;r++){for(let c=0;c<COLS;c++){
-      const piece=pat(pieces,r,c);
-      const p2=drag?pieces.find(x=>x.id===drag):null;
-      const allowed=p2?(p2.team===TA?A_ROWS:B_ROWS):[];
-      const isTarget=drag&&!piece&&allowed.includes(r);
-      const isLocked=piece?.team===kw&&piece?.type==="R"&&r===CY&&c===CX;
-      const bg=cellBg(r,c);
-      const fbg=isTarget?`linear-gradient(rgba(251,191,36,0.3),rgba(251,191,36,0.3)),${bg}`:bg;
-      const cell=mkD({width:CS+"px",height:CS+"px",background:fbg,border:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",cursor:isTarget?"crosshair":piece&&!isLocked?"grab":"default",position:"relative",flexShrink:"0"});
-      if(r===CY&&c===CX&&!piece){const ring=mkD({position:"absolute",width:"32px",height:"32px",borderRadius:"50%",border:"2px solid rgba(255,255,255,0.25)",pointerEvents:"none"});cell.appendChild(ring);}
-      if(piece){
-        const pw=mkD({position:"relative"});
-        pw.appendChild(makeIcon(piece.type,piece.team,CS-8));
-        if(piece.hasBall){const b=mkD({position:"absolute",bottom:"-8px",right:"-8px",fontSize:"13px",zIndex:"5"});b.textContent="⚽";pw.appendChild(b);}
-        if(isLocked){const lk=mkD({position:"absolute",top:"-7px",right:"-7px",fontSize:"10px"});lk.textContent="🔒";pw.appendChild(lk);}
-        cell.appendChild(pw);
-        if(!isLocked)cell.addEventListener("click",()=>{drag=piece.id;drawPlacement();});
-      } else {
-        if(isTarget){const dot=mkD({width:"8px",height:"8px",borderRadius:"50%",background:"rgba(251,191,36,0.7)"});cell.appendChild(dot);}
-        cell.addEventListener("click",()=>{
-          if(!drag)return;
-          const p=pieces.find(x=>x.id===drag);if(!p)return;
-          const al=p.team===TA?A_ROWS:B_ROWS;
-          if(!al.includes(r)||pieces.find(x=>x.id!==drag&&x.row===r&&x.col===c))return;
-          pieces=pieces.map(x=>x.id===drag?{...x,row:r,col:c}:x);
-          drag=null;drawPlacement();
-        });
-      }
-      grid.appendChild(cell);
-    }}
-  }
-  drawPlacement();
-  fc.appendChild(grid);fr.appendChild(fc);
-  const rl=mkD({display:"flex",flexDirection:"column",marginLeft:"3px"});
-  for(let i=0;i<ROWS;i++){const l=mkD({height:CS+"px",width:"18px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"8px",color:"rgba(255,255,255,0.35)"});l.textContent=i+1;rl.appendChild(l);}
-  fr.appendChild(rl);fw.appendChild(fr);
-  const cl=mkD({display:"flex",marginTop:"2px"});
-  COL_LABELS.forEach(l=>{const lb=mkD({width:CS+"px",textAlign:"center",fontSize:"8px",color:"rgba(255,255,255,0.35)"});lb.textContent=l;cl.appendChild(lb);});
-  fw.appendChild(cl);wrap.appendChild(fw);return wrap;
-}
-
-// ── PLACEMENT ONLINE (solo tus piezas) ───────────────────────────────────────
+// ── COLOCACION ONLINE ─────────────────────────────────────────────────────────
 function renderOnlinePlacement(){
   const myFm=G.myTeam===TA?G.fmA:G.fmB;
   let pieces=defaultPieces(myFm,G.myTeam,TA);
   let drag=null;
+  const myRows=G.myTeam===TA?A_ROWS:B_ROWS;
   const wrap=mkD({minHeight:"100vh",background:"#0a1628",display:"flex",gap:"12px",padding:"12px",overflowX:"auto",alignItems:"flex-start"});
-  const side=mkD({display:"flex",flexDirection:"column",gap:"10px",minWidth:"200px"});
+  const side=mkD({display:"flex",flexDirection:"column",gap:"10px",minWidth:"180px"});
   const info=mkD({background:"#0f1c2e",border:"2px solid #7c3aed",borderRadius:"12px",padding:"14px 16px"});
   info.appendChild(mkT("TU COLOCACION",{fontSize:"9px",color:"#7c3aed",letterSpacing:"3px",marginBottom:"6px"}));
-  info.appendChild(mkT("Coloca tus piezas en tu mitad del campo",{fontSize:"10px",color:"#9ca3af",lineHeight:"1.8"}));
+  info.appendChild(mkT("Toca una pieza y luego la celda destino en tu mitad.",{fontSize:"10px",color:"#9ca3af",lineHeight:"1.8"}));
   side.appendChild(info);
   const confirmBtn=document.createElement("button");
-  confirmBtn.textContent="✅ CONFIRMAR";
-  confirmBtn.style.cssText="width:100%;padding:12px;background:#064e3b;border:2px solid #10b981;border-radius:12px;color:white;font-size:12px;font-weight:900;cursor:pointer;font-family:monospace;letter-spacing:3px";
+  confirmBtn.textContent="✅ CONFIRMAR POSICION";
+  confirmBtn.style.cssText="width:100%;padding:12px;background:#064e3b;border:2px solid #10b981;border-radius:12px;color:white;font-size:11px;font-weight:900;cursor:pointer;font-family:monospace;letter-spacing:2px";
   confirmBtn.onclick=async()=>{
     confirmBtn.disabled=true;confirmBtn.textContent="Enviando...";
     const myKey=G.myTeam===TA?"piecesA":"piecesB";
@@ -518,11 +429,10 @@ function renderOnlinePlacement(){
     const newState={...prev,[myKey]:pieces};
     await sb.from("game_state").upsert({room_id:G.roomCode,state:newState,updated_at:new Date().toISOString()});
     if(prev[otherKey]){
-      const all=[...newState.piecesA,...newState.piecesB];
-      G.pieces=all;G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
+      G.pieces=[...newState.piecesA,...newState.piecesB];
+      G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
       G.score={A:0,B:0};G.log=["Equipo A saca."];G.adv=0;G.bonus=false;G.over=false;
-      G.phase="ONLINE_GAME";
-      subscribeOnline();render();
+      G.phase="ONLINE_GAME";subscribeOnline();render();
     } else {
       G.phase="ONLINE_WAIT_PLACE";render();
       const ch=sb.channel("place:"+G.roomCode)
@@ -530,11 +440,10 @@ function renderOnlinePlacement(){
           const s=payload.new?.state;
           if(!s||!s[otherKey]||!s[myKey])return;
           ch.unsubscribe();
-          const all=[...s.piecesA,...s.piecesB];
-          G.pieces=all;G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
+          G.pieces=[...s.piecesA,...s.piecesB];
+          G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
           G.score={A:0,B:0};G.log=["Equipo A saca."];G.adv=0;G.bonus=false;G.over=false;
-          G.phase="ONLINE_GAME";
-          subscribeOnline();render();
+          G.phase="ONLINE_GAME";subscribeOnline();render();
         }).subscribe();
     }
   };
@@ -542,11 +451,10 @@ function renderOnlinePlacement(){
 
   const fw=mkD({display:"flex",flexDirection:"column"});
   const fr=mkD({display:"flex"});
-  const fc=mkD({position:"relative",border:"3px solid #1f6b3d",borderRadius:"4px",overflow:"hidden"});
+  const fc=mkD({position:"relative",border:"3px solid #1f6b3d",borderRadius:"4px",overflow:"hidden",boxShadow:"0 0 30px rgba(0,150,60,0.3)"});
   fc.appendChild(makeSVG());
   const grid=document.createElement("div");
   grid.style.cssText=`display:grid;grid-template-columns:repeat(${COLS},${CS}px);grid-template-rows:repeat(${ROWS},${CS}px);position:relative;z-index:2`;
-  const myRows=G.myTeam===TA?A_ROWS:B_ROWS;
   function drawP(){
     grid.innerHTML="";
     for(let r=0;r<ROWS;r++){for(let c=0;c<COLS;c++){
@@ -560,17 +468,23 @@ function renderOnlinePlacement(){
         pw.appendChild(makeIcon(piece.type,piece.team,CS-8));
         if(piece.hasBall){const b=mkD({position:"absolute",bottom:"-8px",right:"-8px",fontSize:"13px"});b.textContent="⚽";pw.appendChild(b);}
         cell.appendChild(pw);
-        cell.addEventListener("click",()=>{drag=piece.id;drawP();});
-      } else {
-        if(isTarget){const dot=mkD({width:"8px",height:"8px",borderRadius:"50%",background:"rgba(251,191,36,0.7)"});cell.appendChild(dot);}
-        cell.addEventListener("click",()=>{
-          if(!drag)return;
+      } else if(isTarget){
+        const dot=mkD({width:"8px",height:"8px",borderRadius:"50%",background:"rgba(251,191,36,0.7)"});cell.appendChild(dot);
+      }
+      // Touch support
+      let _px=0,_py=0,_mv=false;
+      cell.addEventListener("pointerdown",e=>{_px=e.clientX;_py=e.clientY;_mv=false;},{passive:true});
+      cell.addEventListener("pointermove",e=>{if(Math.abs(e.clientX-_px)>8||Math.abs(e.clientY-_py)>8)_mv=true;},{passive:true});
+      cell.addEventListener("pointerup",e=>{
+        if(_mv)return;e.preventDefault();
+        if(piece){drag=piece.id;drawP();}
+        else if(drag){
           const p=pieces.find(x=>x.id===drag);if(!p)return;
           if(!myRows.includes(r)||pieces.find(x=>x.id!==drag&&x.row===r&&x.col===c))return;
           pieces=pieces.map(x=>x.id===drag?{...x,row:r,col:c}:x);
           drag=null;drawP();
-        });
-      }
+        }
+      },{passive:false});
       grid.appendChild(cell);
     }}
   }
@@ -584,9 +498,9 @@ function renderOnlinePlacement(){
   fw.appendChild(cl);wrap.appendChild(fw);return wrap;
 }
 
-// ── SUSCRIPCION ONLINE ────────────────────────────────────────────────────────
+// ── SUPABASE REALTIME ─────────────────────────────────────────────────────────
 function subscribeOnline(){
-  if(G.onlineChannel){sb.removeChannel(G.onlineChannel);}
+  if(G.onlineChannel)sb.removeChannel(G.onlineChannel);
   G.onlineChannel=sb.channel("game:"+G.roomCode)
     .on("postgres_changes",{event:"*",schema:"public",table:"game_state",filter:"room_id=eq."+G.roomCode},payload=>{
       const s=payload.new?.state;
@@ -607,32 +521,34 @@ function subscribeOnline(){
 }
 
 async function publishOnline(extra={}){
-  const state={
-    pieces:G.pieces,ball:G.ball,curTeam:G.curTeam,score:G.score,
-    adv:G.adv,bonus:G.bonus,stealerId:G.stealerId,kickoff:G.kickoff,
-    over:G.over,movedBy:G.myTeam,...extra,
+  await sb.from("game_state").upsert({
+    room_id:G.roomCode,
+    state:{pieces:G.pieces,ball:G.ball,curTeam:G.curTeam,score:G.score,adv:G.adv,bonus:G.bonus,stealerId:G.stealerId,kickoff:G.kickoff,over:G.over,movedBy:G.myTeam,...extra},
     updated_at:new Date().toISOString()
-  };
-  await sb.from("game_state").upsert({room_id:G.roomCode,state,updated_at:new Date().toISOString()});
+  });
 }
 
-// ── JUEGO ONLINE ──────────────────────────────────────────────────────────────
-function renderOnlineGame(){
+// ── JUEGO ─────────────────────────────────────────────────────────────────────
+function renderGame(){
   const isMyTurn=G.curTeam===G.myTeam;
-  const wrap=mkD({minHeight:"100vh",background:"#0a1628",display:"flex",gap:"12px",padding:"12px",overflowX:"auto"});
-  // Panel lateral
-  const side=mkD({display:"flex",flexDirection:"column",gap:"8px",minWidth:"170px"});
+  const wrap=mkD({minHeight:"100vh",background:"#0a1628",display:"flex",flexDirection:isPortrait()?"column":"row",gap:"8px",padding:"8px",overflow:"hidden"});
+  if(isPortrait()){wrap.appendChild(renderField(isMyTurn));wrap.appendChild(renderSide(isMyTurn));}
+  else{wrap.appendChild(renderSide(isMyTurn));wrap.appendChild(renderField(isMyTurn));}
+  return wrap;
+}
 
-  // Info sala
-  const roomBox=mkD({background:"#0f1c2e",border:"2px solid #7c3aed",borderRadius:"10px",padding:"8px 12px"});
-  roomBox.appendChild(mkT("SALA ONLINE",{fontSize:"8px",color:"#7c3aed",letterSpacing:"2px",marginBottom:"4px"}));
-  roomBox.appendChild(mkT(G.roomCode,{fontSize:"14px",fontWeight:"900",color:"white",letterSpacing:"4px"}));
+function renderSide(isMyTurn){
+  const side=mkD({display:"flex",flexDirection:isPortrait()?"row":"column",flexWrap:isPortrait()?"wrap":"nowrap",gap:"6px",width:isPortrait()?"100%":"170px",minWidth:isPortrait()?"unset":"170px",alignItems:isPortrait()?"flex-start":"stretch"});
+
+  // Sala
+  const roomBox=mkD({background:"#0f1c2e",border:"2px solid #7c3aed",borderRadius:"10px",padding:"6px 10px",flex:isPortrait()?"1":"unset"});
+  roomBox.appendChild(mkT("SALA: "+G.roomCode,{fontSize:"9px",color:"#7c3aed",fontWeight:"900",letterSpacing:"3px"}));
   const myColor=G.myTeam===TA?"#3b82f6":"#ef4444";
-  roomBox.appendChild(mkT("Tu: Equipo "+G.myTeam+(G.myTeam===TA?" · Azul":" · Rojo"),{fontSize:"8px",color:myColor,marginTop:"2px"}));
+  roomBox.appendChild(mkT("Tu: Equipo "+G.myTeam,{fontSize:"8px",color:myColor,marginTop:"2px"}));
   side.appendChild(roomBox);
 
   // Marcador
-  const sb2=mkD({background:"#0f1c2e",border:"2px solid #1f2937",borderRadius:"12px",padding:"10px 14px",textAlign:"center"});
+  const sb2=mkD({background:"#0f1c2e",border:"2px solid #1f2937",borderRadius:"12px",padding:isPortrait()?"6px 10px":"10px 14px",textAlign:"center",flex:isPortrait()?"1":"unset"});
   sb2.appendChild(mkT("MARCADOR",{fontSize:"8px",color:"#4b5563",letterSpacing:"2px",marginBottom:"4px"}));
   const sr=mkD({display:"flex",justifyContent:"center",alignItems:"center",gap:"12px"});
   [{team:TA,c:"#3b82f6",s:G.score.A,fm:G.fmA},{team:null},{team:TB,c:"#ef4444",s:G.score.B,fm:G.fmB}].forEach(x=>{
@@ -647,71 +563,59 @@ function renderOnlineGame(){
 
   // Turno
   const tc=G.curTeam===TA?"#3b82f6":"#ef4444";
-  const tb=mkD({background:isMyTurn?"#0d1e3a":"#1c1c1c",border:`2px solid ${isMyTurn?tc:"#374151"}`,borderRadius:"10px",padding:"8px 12px",textAlign:"center",transition:"all 0.3s"});
+  const tb=mkD({background:isMyTurn?"#0d1e3a":"#1c1c1c",border:`2px solid ${isMyTurn?tc:"#374151"}`,borderRadius:"10px",padding:"8px 12px",textAlign:"center",flex:isPortrait()?"1":"unset"});
   tb.appendChild(mkT("TURNO",{fontSize:"8px",color:"#6b7280",letterSpacing:"2px"}));
-  tb.appendChild(mkT(isMyTurn?"✅ Tu turno":"⏳ Esperando...",{fontSize:"12px",fontWeight:"700",marginTop:"2px",color:isMyTurn?"white":"#6b7280"}));
-  if(G.bonus&&isMyTurn){const b=mkD({fontSize:"8px",color:"#fbbf24",marginTop:"2px"});b.textContent="[BONUS]";tb.appendChild(b);}
+  tb.appendChild(mkT(isMyTurn?"✅ Tu turno":"⏳ Rival...",{fontSize:"12px",fontWeight:"700",marginTop:"2px",color:isMyTurn?"white":"#6b7280"}));
+  if(G.bonus&&isMyTurn){const b=mkD({fontSize:"8px",color:"#fbbf24",marginTop:"2px"});b.textContent="BONUS";tb.appendChild(b);}
   side.appendChild(tb);
 
   if(G.over){
     const w=G.score.A>=5?TA:TB;
-    side.appendChild(mkT("EQUIPO "+w+" GANA!",{fontSize:"11px",color:"#fbbf24",fontWeight:"700",textAlign:"center",padding:"6px"}));
-    const btnR=document.createElement("button");
-    btnR.textContent="🔄 Nueva Partida";
-    btnR.style.cssText="width:100%;background:#78350f;border:1px solid #f59e0b;border-radius:6px;color:white;padding:7px;cursor:pointer;font-size:10px;font-family:monospace;font-weight:700";
-    btnR.onclick=()=>{if(G.onlineChannel)sb.removeChannel(G.onlineChannel);location.reload();};
-    side.appendChild(btnR);
+    const ov=mkD({textAlign:"center",padding:"8px"});
+    ov.appendChild(mkT("EQUIPO "+w+" GANA!",{fontSize:"13px",color:"#fbbf24",fontWeight:"900"}));
+    const btnNueva=document.createElement("button");
+    btnNueva.textContent="🔄 Nueva Partida";
+    btnNueva.style.cssText="width:100%;margin-top:6px;background:#78350f;border:1px solid #f59e0b;border-radius:6px;color:white;padding:8px;cursor:pointer;font-size:10px;font-family:monospace;font-weight:700";
+    btnNueva.onclick=()=>{if(G.onlineChannel)sb.removeChannel(G.onlineChannel);location.reload();};
+    ov.appendChild(btnNueva);
+    side.appendChild(ov);
   }
 
-  const btnR2=document.createElement("button");
-  btnR2.textContent="🔄";
-  btnR2.style.cssText="background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;padding:6px;cursor:pointer;font-size:10px;font-family:monospace;font-weight:700";
-  btnR2.onclick=()=>{if(G.onlineChannel)sb.removeChannel(G.onlineChannel);location.reload();};
-  side.appendChild(btnR2);
-
   // Registro
-  const lb=mkD({background:"#0f1c2e",border:"1px solid #1f2937",borderRadius:"8px",overflow:"hidden"});
+  const lb=mkD({background:"#0f1c2e",border:"1px solid #1f2937",borderRadius:"8px",overflow:"hidden",flex:isPortrait()?"2":"unset"});
   const lh=mkD({padding:"7px 11px",borderBottom:"1px solid #1f2937"});
   lh.appendChild(mkT("REGISTRO",{fontSize:"9px",color:"#6b7280",letterSpacing:"2px",fontWeight:"700"}));
   lb.appendChild(lh);
-  const lbody=mkD({padding:"8px 11px",maxHeight:"200px",overflowY:"auto"});
+  const lbody=mkD({padding:"8px 11px",maxHeight:isPortrait()?"80px":"200px",overflowY:"auto"});
   G.log.forEach((l,i)=>{
     const e=mkD({fontSize:"9px",marginBottom:"3px",color:i===0?"#e5e7eb":"#6b7280",borderLeft:`2px solid ${i===0?"#10b981":"#1f2937"}`,paddingLeft:"5px",lineHeight:"1.5"});
     e.textContent=l;lbody.appendChild(e);
   });
   lb.appendChild(lbody);side.appendChild(lb);
-  wrap.appendChild(side);
+  return side;
+}
 
-  // Campo
-  const fieldWrap=mkD({display:"flex",flexDirection:"column"});
-  fieldWrap.appendChild(mkT("EQUIPO A (AZUL) — PORTERIA ARRIBA",{textAlign:"center",fontSize:"8px",color:"#60a5fa",letterSpacing:"3px",marginBottom:"4px",fontWeight:"700"}));
+function renderField(isMyTurn){
+  const wrap=mkD({display:"flex",flexDirection:"column"});
+  wrap.appendChild(mkT("EQUIPO A (AZUL) — PORTERIA ARRIBA",{textAlign:"center",fontSize:"8px",color:"#60a5fa",letterSpacing:"3px",marginBottom:"4px",fontWeight:"700"}));
   const fr=mkD({display:"flex"});
   const fc=mkD({position:"relative",border:"3px solid #1f6b3d",borderRadius:"4px",overflow:"hidden",boxShadow:"0 0 30px rgba(0,150,60,0.3)"});
   fc.appendChild(makeSVG());
   const grid=document.createElement("div");
-  grid.id="game-grid";
   grid.style.cssText=`display:grid;grid-template-columns:repeat(${COLS},${CS}px);grid-template-rows:repeat(${ROWS},${CS}px);position:relative;z-index:2`;
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)grid.appendChild(renderOnlineCell(r,c,isMyTurn));
-  // Touch support for mobile
-  grid.addEventListener("touchend",e=>{
-    e.preventDefault();
-    const t=e.changedTouches[0];
-    const el=document.elementFromPoint(t.clientX,t.clientY);
-    if(el)el.click();
-  },{passive:false});
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)grid.appendChild(renderCell(r,c,isMyTurn));
   fc.appendChild(grid);fr.appendChild(fc);
   const rl=mkD({display:"flex",flexDirection:"column",marginLeft:"3px"});
   for(let i=0;i<ROWS;i++){const l=mkD({height:CS+"px",width:"18px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"8px",color:"rgba(255,255,255,0.35)"});l.textContent=i+1;rl.appendChild(l);}
-  fr.appendChild(rl);fieldWrap.appendChild(fr);
+  fr.appendChild(rl);wrap.appendChild(fr);
   const cl=mkD({display:"flex",marginTop:"2px"});
-  COL_LABELS.forEach(l=>{const lb2=mkD({width:CS+"px",textAlign:"center",fontSize:"8px",color:"rgba(255,255,255,0.35)"});lb2.textContent=l;cl.appendChild(lb2);});
-  fieldWrap.appendChild(cl);
-  fieldWrap.appendChild(mkT("EQUIPO B (ROJO) — PORTERIA ABAJO",{textAlign:"center",fontSize:"8px",color:"#f87171",letterSpacing:"3px",marginTop:"4px",fontWeight:"700"}));
-  wrap.appendChild(fieldWrap);
+  COL_LABELS.forEach(l=>{const lb=mkD({width:CS+"px",textAlign:"center",fontSize:"8px",color:"rgba(255,255,255,0.35)"});lb.textContent=l;cl.appendChild(lb);});
+  wrap.appendChild(cl);
+  wrap.appendChild(mkT("EQUIPO B (ROJO) — PORTERIA ABAJO",{textAlign:"center",fontSize:"8px",color:"#f87171",letterSpacing:"3px",marginTop:"4px",fontWeight:"700"}));
   return wrap;
 }
 
-function renderOnlineCell(r,c,isMyTurn){
+function renderCell(r,c,isMyTurn){
   const piece=pat(G.pieces,r,c);
   const isBall=G.ball.row===r&&G.ball.col===c;
   const isSel=piece?.id===G.sel;
@@ -741,57 +645,68 @@ function renderOnlineCell(r,c,isMyTurn){
     ow.appendChild(makeIcon(piece.type,piece.team,CS-8));
     pw.appendChild(ow);
     if(isBall){const b=mkD({position:"absolute",bottom:"-9px",right:"-9px",fontSize:"15px",zIndex:"7"});b.textContent="⚽";pw.appendChild(b);}
+    if(isShot&&isShot.isGoal){const gol=mkD({position:"absolute",inset:"-2px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",zIndex:"6"});gol.textContent="🥅";pw.appendChild(gol);}
     cell.appendChild(pw);
   }
-  if(isMyTurn)cell.addEventListener("click",()=>clickOnline(r,c));
+  // Touch: distingue tap de scroll
+  let _px=0,_py=0,_moved=false;
+  cell.addEventListener("pointerdown",e=>{_px=e.clientX;_py=e.clientY;_moved=false;},{passive:true});
+  cell.addEventListener("pointermove",e=>{if(Math.abs(e.clientX-_px)>8||Math.abs(e.clientY-_py)>8)_moved=true;},{passive:true});
+  cell.addEventListener("pointerup",e=>{if(!_moved&&isMyTurn){e.preventDefault();clickCell(r,c);}},{passive:false});
   return cell;
 }
 
-function clickOnline(r,c){
+function clickCell(r,c){
   if(G.over)return;
   const cp=pat(G.pieces,r,c);
   const ibc=G.ball.row===r&&G.ball.col===c;
   if(G.clickCt===2){
     const sc=G.shots.find(s=>s.row===r&&s.col===c);
-    if(sc){execOnlineShot(sc);return;}
+    if(sc){execShot(sc);return;}
     if(cp&&cp.id===G.sel){G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;render();return;}
     if(cp&&cp.team===G.curTeam){
       if(G.bonus&&G.stealerId&&cp.id!==G.stealerId){addLog("Mueve la pieza que tomo el balon.");render();return;}
-      selOnlinePiece(cp);return;
+      selPiece(cp);return;
     }
     G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;render();return;
   }
   if(G.clickCt===1&&G.sel){
-    if(G.moves.find(m=>m.row===r&&m.col===c)){execOnlineMove(G.sel,r,c);return;}
+    if(G.moves.find(m=>m.row===r&&m.col===c)){execMove(G.sel,r,c);return;}
     if(cp&&cp.team===G.curTeam){
-      if(cp.id===G.sel){const hb=cp.row===G.ball.row&&cp.col===G.ball.col;if(hb)actOnlineShots(cp);else{G.sel=null;G.moves=[];G.clickCt=0;render();}return;}
+      if(cp.id===G.sel){const hb=cp.row===G.ball.row&&cp.col===G.ball.col;if(hb)actShots(cp);else{G.sel=null;G.moves=[];G.clickCt=0;render();}return;}
       if(G.bonus&&G.stealerId&&cp.id!==G.stealerId){addLog("Mueve la pieza que tomo el balon.");render();return;}
-      selOnlinePiece(cp);return;
+      selPiece(cp);return;
     }
-    if(ibc&&!cp){const sp=G.pieces.find(p=>p.id===G.sel);if(sp)actOnlineShots(sp);return;}
+    if(ibc&&!cp){const sp=G.pieces.find(p=>p.id===G.sel);if(sp)actShots(sp);return;}
     G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;render();return;
   }
   if(cp&&cp.team===G.curTeam){
     if(G.bonus&&G.stealerId&&cp.id!==G.stealerId){addLog("Mueve la pieza que tomo el balon.");render();return;}
     if(G.kickoff){const bh=G.pieces.find(p=>p.row===G.ball.row&&p.col===G.ball.col);if(bh&&cp.id!==bh.id){addLog("Saque: el portador actua primero.");render();return;}}
-    selOnlinePiece(cp);
+    selPiece(cp);
   }
 }
 
-function selOnlinePiece(piece){
+function selPiece(piece){
   const hb=piece.row===G.ball.row&&piece.col===G.ball.col;
   G.sel=piece.id;G.clickCt=1;
   G.moves=getMoves({...piece,hasBall:hb},G.pieces,hb?G.adv:0,G.ball);
   G.shots=[];render();
 }
 
-function actOnlineShots(piece){
+function actShots(piece){
   G.shots=getShots(piece,G.pieces,piece.team);
   G.moves=[];G.clickCt=2;
   addLog(G.shots.length?"Elige direccion de tiro":"Sin tiro posible.");render();
 }
 
-function execOnlineMove(pid,r,c){
+function nextTurn(){
+  G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;
+  G.bonus=false;G.stealerId=null;G.stealerDir={dr:1,dc:0};G.adv=0;G.kickoff=false;
+  G.curTeam=G.curTeam===TA?TB:TA;
+}
+
+function execMove(pid,r,c){
   const piece=G.pieces.find(p=>p.id===pid);if(!piece)return;
   const dest=pat(G.pieces,r,c);
   const myBall=piece.row===G.ball.row&&piece.col===G.ball.col;
@@ -824,17 +739,16 @@ function execOnlineMove(pid,r,c){
   publishOnline({logMsg:""});render();
 }
 
-function execOnlineShot(cell){
+function execShot(cell){
   G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;
   if(cell.isGoal){
     const azul=cell.row===TOP_GOAL&&GOAL_COLS.includes(cell.col);
     const scorer=azul?TB:TA,kTeam=azul?TA:TB;
     const msg=scorer!==G.curTeam?"Autogol! Punto Equipo "+scorer:"GOOOOOL del Equipo "+scorer+"!";
-    addLog(msg);
-    G.score[scorer]++;
+    addLog(msg);G.score[scorer]++;
     if(G.score[scorer]>=5){
-      G.over=true;addLog("Equipo "+scorer+" CAMPEON!");
-      publishOnline({logMsg:"Equipo "+scorer+" CAMPEON!"});render();return;
+      G.over=true;const winMsg="Equipo "+scorer+" CAMPEON!";addLog(winMsg);
+      publishOnline({logMsg:winMsg});render();return;
     }
     const base=buildAll(G.fmA,G.fmB,kTeam);
     G.pieces=base.map(p=>{if(p.team!==kTeam&&p.row===CY)return{...p,row:p.team===TA?CY-1:CY+1};return p;});
@@ -848,218 +762,6 @@ function execOnlineShot(cell){
   addLog(msg);G.adv=0;G.bonus=false;G.stealerId=null;G.kickoff=false;
   G.curTeam=G.curTeam===TA?TB:TA;
   publishOnline({logMsg:msg});render();
-}
-
-// ── JUEGO LOCAL ───────────────────────────────────────────────────────────────
-function renderGame(){
-  const wrap=mkD({minHeight:"100vh",background:"#0a1628",display:"flex",gap:"12px",padding:"12px",overflowX:"auto"});
-  wrap.appendChild(renderSide());wrap.appendChild(renderField());return wrap;
-}
-
-function renderSide(){
-  const side=mkD({display:"flex",flexDirection:"column",gap:"8px",minWidth:"165px"});
-  const sb2=mkD({background:"#0f1c2e",border:"2px solid #1f2937",borderRadius:"12px",padding:"10px 14px",textAlign:"center"});
-  sb2.appendChild(mkT("MARCADOR",{fontSize:"8px",color:"#4b5563",letterSpacing:"2px",marginBottom:"4px"}));
-  const sr=mkD({display:"flex",justifyContent:"center",alignItems:"center",gap:"12px"});
-  [{team:TA,c:"#3b82f6",s:G.score.A,fm:G.fmA},{team:null},{team:TB,c:"#ef4444",s:G.score.B,fm:G.fmB}].forEach(x=>{
-    if(!x.team){const d=mkD({fontSize:"16px",color:"#1f2937"});d.textContent="—";sr.appendChild(d);return;}
-    const d=mkD({textAlign:"center"});
-    d.appendChild(mkT(x.team,{fontSize:"8px",color:x.c}));
-    d.appendChild(mkT(x.s,{fontSize:"28px",fontWeight:"900",color:x.c}));
-    d.appendChild(mkT(x.fm.label,{fontSize:"7px",color:"#4b5563"}));
-    sr.appendChild(d);
-  });
-  sb2.appendChild(sr);side.appendChild(sb2);
-  const tc=G.curTeam===TA?"#3b82f6":"#ef4444";
-  const tb=mkD({background:G.curTeam===TA?"#0d1e3a":"#3a0d0d",border:`2px solid ${tc}`,borderRadius:"10px",padding:"8px 12px",textAlign:"center"});
-  tb.appendChild(mkT("TURNO",{fontSize:"8px",color:"#6b7280",letterSpacing:"2px"}));
-  tb.appendChild(mkT("Equipo "+G.curTeam+(G.bonus?" [BONUS]":""),{fontSize:"13px",fontWeight:"700",marginTop:"2px"}));
-  side.appendChild(tb);
-  if(G.over){
-    const w=G.score.A>=5?TA:TB;
-    side.appendChild(mkT("EQUIPO "+w+" GANA!",{fontSize:"11px",color:"#fbbf24",fontWeight:"700",textAlign:"center",padding:"6px"}));
-  }
-  const btns=mkD({display:"flex",gap:"4px"});
-  const mbtn=(t,fn)=>{const b=document.createElement("button");b.textContent=t;b.style.cssText="flex:1;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;padding:6px;font-size:10px;font-family:monospace;font-weight:700;cursor:pointer";b.addEventListener("click",fn);return b;};
-  btns.appendChild(mbtn("↩",undoMove));
-  btns.appendChild(mbtn("🔄",()=>{G.phase="MODE";G.gameMode=null;G.fmA=null;G.fmB=null;G.pieces=[];G.history=[];G.score={A:0,B:0};render();}));
-  side.appendChild(btns);
-  const lb=mkD({background:"#0f1c2e",border:"1px solid #1f2937",borderRadius:"8px",overflow:"hidden"});
-  const lh=mkD({padding:"7px 11px",borderBottom:"1px solid #1f2937"});
-  lh.appendChild(mkT("REGISTRO",{fontSize:"9px",color:"#6b7280",letterSpacing:"2px",fontWeight:"700"}));
-  lb.appendChild(lh);
-  const lbody=mkD({padding:"8px 11px",maxHeight:"200px",overflowY:"auto"});
-  G.log.forEach((l,i)=>{const e=mkD({fontSize:"9px",marginBottom:"3px",color:i===0?"#e5e7eb":"#6b7280",borderLeft:`2px solid ${i===0?"#10b981":"#1f2937"}`,paddingLeft:"5px",lineHeight:"1.5"});e.textContent=l;lbody.appendChild(e);});
-  lb.appendChild(lbody);side.appendChild(lb);
-  return side;
-}
-
-function renderField(){
-  const wrap=mkD({display:"flex",flexDirection:"column"});
-  wrap.appendChild(mkT("AZUL - PORTERIA ARRIBA",{textAlign:"center",fontSize:"8px",color:"#60a5fa",letterSpacing:"3px",marginBottom:"4px",fontWeight:"700"}));
-  const fr=mkD({display:"flex"});
-  const fc=mkD({position:"relative",border:"3px solid #1f6b3d",borderRadius:"4px",overflow:"hidden",boxShadow:"0 0 30px rgba(0,150,60,0.3)"});
-  fc.appendChild(makeSVG());
-  const grid=document.createElement("div");
-  grid.style.cssText=`display:grid;grid-template-columns:repeat(${COLS},${CS}px);grid-template-rows:repeat(${ROWS},${CS}px);position:relative;z-index:2`;
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)grid.appendChild(renderCell(r,c));
-  fc.appendChild(grid);fr.appendChild(fc);
-  const rl=mkD({display:"flex",flexDirection:"column",marginLeft:"3px"});
-  for(let i=0;i<ROWS;i++){const l=mkD({height:CS+"px",width:"18px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"8px",color:"rgba(255,255,255,0.35)"});l.textContent=i+1;rl.appendChild(l);}
-  fr.appendChild(rl);wrap.appendChild(fr);
-  const cl=mkD({display:"flex",marginTop:"2px"});
-  COL_LABELS.forEach(l=>{const lb=mkD({width:CS+"px",textAlign:"center",fontSize:"8px",color:"rgba(255,255,255,0.35)"});lb.textContent=l;cl.appendChild(lb);});
-  wrap.appendChild(cl);
-  wrap.appendChild(mkT("ROJO - PORTERIA ABAJO",{textAlign:"center",fontSize:"8px",color:"#f87171",letterSpacing:"3px",marginTop:"4px",fontWeight:"700"}));
-  return wrap;
-}
-
-function renderCell(r,c){
-  const piece=pat(G.pieces,r,c);
-  const isBall=G.ball.row===r&&G.ball.col===c;
-  const isSel=piece?.id===G.sel;
-  const isMove=!!G.moves.find(m=>m.row===r&&m.col===c);
-  const isShot=G.shots.find(s=>s.row===r&&s.col===c)||null;
-  const bg=cellBg(r,c);
-  const ov=isShot?(isShot.isGoal?"rgba(220,38,38,0.75)":isShot.isOwn?"rgba(37,99,235,0.65)":"rgba(234,88,12,0.6)"):isMove?"rgba(234,179,8,0.55)":isSel?"rgba(255,255,255,0.15)":"";
-  const fbg=ov?`linear-gradient(${ov},${ov}),${bg}`:bg;
-  const selC=G.clickCt===2?"#f87171":"#fbbf24";
-  const cell=mkD({width:CS+"px",height:CS+"px",background:fbg,border:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative",flexShrink:"0"});
-  if(isBall&&!piece){const b=mkD({position:"absolute",inset:"0",display:"flex",alignItems:"center",justifyContent:"center",zIndex:"6",fontSize:"26px"});b.textContent="⚽";cell.appendChild(b);}
-  if(isMove&&!piece&&!isBall){const d=mkD({width:"10px",height:"10px",borderRadius:"50%",background:"rgba(234,179,8,0.9)",boxShadow:"0 0 6px rgba(234,179,8,0.6)"});cell.appendChild(d);}
-  if(isShot&&!piece){
-    if(isShot.isGoal){
-      const gm=mkD({position:"absolute",inset:"0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:"6",gap:"1px"});
-      const gi=mkD({fontSize:"15px"});gi.textContent="🥅";gm.appendChild(gi);
-      const gd=mkD({width:"6px",height:"6px",borderRadius:"50%",background:"#ef4444",boxShadow:"0 0 8px #ef4444"});gm.appendChild(gd);
-      cell.appendChild(gm);
-    }else{
-      const d=mkD({width:"9px",height:"9px",borderRadius:"50%",background:"rgba(234,88,12,0.9)",boxShadow:"0 0 7px rgba(234,88,12,0.7)",zIndex:"6"});cell.appendChild(d);
-    }
-  }
-  if(piece){
-    const rad={C:"50%",T:"4px",P:"6px",R:"6px"}[piece.type];
-    const pw=mkD({position:"relative",transform:isSel?"scale(1.12)":"scale(1)",transition:"all 0.1s"});
-    const ow=mkD({outline:isSel?`2px solid ${selC}`:"none",outlineOffset:"2px",borderRadius:rad,boxShadow:isSel?`0 0 12px ${selC}`:"none"});
-    ow.appendChild(makeIcon(piece.type,piece.team,CS-8));
-    pw.appendChild(ow);
-    if(isBall){const b=mkD({position:"absolute",bottom:"-9px",right:"-9px",fontSize:"15px",zIndex:"7"});b.textContent="⚽";pw.appendChild(b);}
-    if(isShot&&isShot.isGoal){const gol=mkD({position:"absolute",inset:"-2px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",zIndex:"6"});gol.textContent="🥅";pw.appendChild(gol);}
-    cell.appendChild(pw);
-  }
-  cell.addEventListener("click",()=>clickCell(r,c));
-  return cell;
-}
-
-function clickCell(r,c){
-  if(G.over)return;
-  const cp=pat(G.pieces,r,c);
-  const ibc=G.ball.row===r&&G.ball.col===c;
-  if(G.clickCt===2){
-    const sc=G.shots.find(s=>s.row===r&&s.col===c);
-    if(sc){execShot(sc);return;}
-    if(cp&&cp.id===G.sel){G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;render();return;}
-    if(cp&&cp.team===G.curTeam){
-      if(G.bonus&&G.stealerId&&cp.id!==G.stealerId){addLog("Mueve la pieza que tomo el balon.");return;}
-      selPiece(cp);return;
-    }
-    G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;render();return;
-  }
-  if(G.clickCt===1&&G.sel){
-    if(G.moves.find(m=>m.row===r&&m.col===c)){execMove(G.sel,r,c);return;}
-    if(cp&&cp.team===G.curTeam){
-      if(cp.id===G.sel){const hb=cp.row===G.ball.row&&cp.col===G.ball.col;if(hb)actShots(cp);else{G.sel=null;G.moves=[];G.clickCt=0;render();}return;}
-      if(G.bonus&&G.stealerId&&cp.id!==G.stealerId){addLog("Mueve la pieza que tomo el balon.");return;}
-      selPiece(cp);return;
-    }
-    if(ibc&&!cp){const sp=G.pieces.find(p=>p.id===G.sel);if(sp)actShots(sp);return;}
-    G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;render();return;
-  }
-  if(cp&&cp.team===G.curTeam){
-    if(G.bonus&&G.stealerId&&cp.id!==G.stealerId){addLog("Mueve la pieza que tomo el balon.");return;}
-    if(G.kickoff){const bh=G.pieces.find(p=>p.row===G.ball.row&&p.col===G.ball.col);if(bh&&cp.id!==bh.id){addLog("Saque: el portador actua primero.");return;}}
-    selPiece(cp);
-  }
-}
-
-function selPiece(piece){
-  const hb=piece.row===G.ball.row&&piece.col===G.ball.col;
-  G.sel=piece.id;G.clickCt=1;
-  G.moves=getMoves({...piece,hasBall:hb},G.pieces,hb?G.adv:0,G.ball);
-  G.shots=[];render();
-}
-
-function actShots(piece){
-  G.shots=getShots(piece,G.pieces,piece.team);
-  G.moves=[];G.clickCt=2;
-  addLog(G.shots.length?"Elige direccion de tiro":"Sin tiro posible.");render();
-}
-
-function nextTurn(){
-  G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;
-  G.bonus=false;G.stealerId=null;G.stealerDir={dr:1,dc:0};G.adv=0;G.kickoff=false;
-  G.curTeam=G.curTeam===TA?TB:TA;
-}
-
-function execMove(pid,r,c){
-  const piece=G.pieces.find(p=>p.id===pid);if(!piece)return;
-  saveHistory();
-  const dest=pat(G.pieces,r,c);
-  const myBall=piece.row===G.ball.row&&piece.col===G.ball.col;
-  const destBall=G.ball.row===r&&G.ball.col===c;
-  const oppDest=dest&&dest.team!==piece.team;
-  const moveDr=piece.type==="C"?(piece.team===TA?1:-1):sg(r-piece.row);
-  const moveDc=piece.type==="C"?0:sg(c-piece.col);
-  if(dest&&dest.team===piece.team){addLog("No puedes ir sobre un companero.");render();return;}
-  if(dest&&dest.type==="P"&&oppDest){const inL=piece.team===TA?inBL(r,c):inTL(r,c);if(inL){addLog("Portero protegido.");render();return;}}
-  if(dest&&oppDest&&!destBall){addLog("El rival no tiene el balon.");render();return;}
-  const km=piece.type==="C"?getMoves({...piece,hasBall:myBall},G.pieces,myBall?G.adv:0,G.ball):[];
-  const mf=piece.type==="C"&&km.find(m=>m.row===r&&m.col===c&&m.steal);
-  const sad=destBall&&oppDest,sop=!!(mf&&!myBall&&!destBall&&mf.stealPath),fb=destBall&&!dest;
-  const stole=(sad||sop||fb)&&!myBall;
-  let np=G.pieces;
-  if(sad&&dest)np=bumpPiece(np,dest,pid,moveDr,moveDc);
-  np=np.map(p=>p.id===pid?{...p,row:r,col:c}:p);
-  const newBall=(myBall||stole)?{row:r,col:c}:G.ball;
-  G.pieces=np;G.ball=newBall;G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;
-  if(stole){
-    addLog("Balon tomado! Turno bonus.");G.bonus=true;G.adv=0;
-    G.stealerId=pid;G.stealerDir={dr:moveDr,dc:moveDc};
-    const st=np.find(p=>p.id===pid);
-    if(st){G.moves=getMoves({...st,hasBall:true},np,0,newBall);G.sel=pid;G.clickCt=1;}
-    render();return;
-  }
-  if(myBall)G.adv++;else G.adv=0;
-  G.bonus=false;G.stealerId=null;nextTurn();render();
-}
-
-function execShot(cell){
-  saveHistory();
-  G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;
-  if(cell.isGoal){
-    const azul=cell.row===TOP_GOAL&&GOAL_COLS.includes(cell.col);
-    const scorer=azul?TB:TA,kTeam=azul?TA:TB;
-    addLog(scorer!==G.curTeam?"Autogol! Punto Equipo "+scorer:"GOOOOOL del Equipo "+scorer+"!");
-    G.score[scorer]++;
-    if(G.score[scorer]>=5){G.over=true;addLog("Equipo "+scorer+" CAMPEON!");render();return;}
-    const base=buildAll(G.fmA,G.fmB,kTeam);
-    G.repoPieces=base.map(p=>{if(p.team!==kTeam&&p.row===CY)return{...p,row:p.team===TA?CY-1:CY+1};return p;});
-    G.repoKickTeam=kTeam;G.phase="REPO";G.placementPieces=G.repoPieces;
-    render();return;
-  }
-  if((cell.row===0||cell.row===BOT_GOAL)&&!GOAL_COLS.includes(cell.col)){addLog("El balon no puede ir ahi.");render();return;}
-  G.ball={row:cell.row,col:cell.col};
-  const dest=pat(G.pieces,cell.row,cell.col);
-  addLog(dest?"Tiro a "+PNAME[dest.type]:"Tiro a "+COL_LABELS[cell.col]+(cell.row+1));
-  G.adv=0;G.bonus=false;G.stealerId=null;nextTurn();render();
-}
-
-function undoMove(){
-  if(!G.history.length)return;
-  const last=G.history[G.history.length-1];
-  G.pieces=last.pieces;G.ball=last.ball;G.curTeam=last.curTeam;G.score=last.score;G.adv=last.adv||0;
-  G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;G.bonus=false;G.stealerId=null;
-  G.history=G.history.slice(0,-1);render();
 }
 
 render();
