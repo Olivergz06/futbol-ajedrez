@@ -73,13 +73,14 @@ function colsByCount(n){
   const o=[];for(let i=0;i<n;i++)o.push(Math.round(1+i*8/(n-1)));return o;
 }
 
-let _uid=0;
+
 function defaultPieces(fm,team,kw){
-  const isA=team===TA;const ps=[];
-  ps.push({id:++_uid,team,type:"P",row:isA?1:15,col:5,hasBall:false});
-  colsByCount(fm.T).forEach(c=>ps.push({id:++_uid,team,type:"T",row:isA?2:14,col:c,hasBall:false}));
-  colsByCount(fm.C).forEach(c=>ps.push({id:++_uid,team,type:"C",row:isA?5:12,col:c,hasBall:false}));
-  colsByCount(fm.R).forEach(c=>ps.push({id:++_uid,team,type:"R",row:isA?6:10,col:c,hasBall:false}));
+  const isA=team===TA;const ps=[];const base=isA?100:200;let idx=0;
+  const mkp=(type,row,col)=>({id:base+(idx++),team,type,row,col,hasBall:false});
+  ps.push(mkp("P",isA?1:15,5));
+  colsByCount(fm.T).forEach(c=>ps.push(mkp("T",isA?2:14,c)));
+  colsByCount(fm.C).forEach(c=>ps.push(mkp("C",isA?5:12,c)));
+  colsByCount(fm.R).forEach(c=>ps.push(mkp("R",isA?6:10,c)));
   if(kw===team){const ri=ps.findIndex(p=>p.type==="R");if(ri>=0){ps[ri].row=CY;ps[ri].col=CX;ps[ri].hasBall=true;}}
   return ps;
 }
