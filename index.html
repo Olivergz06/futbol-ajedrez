@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
-<title>ChessGol Online</title>
+<title>ChessGol Online</title><!-- v1779342055 -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -32,8 +32,8 @@ body{background:#0a1628;font-family:monospace;color:white;overflow:hidden;height
 .board{display:grid}
 .cell{display:flex;align-items:center;justify-content:center;position:relative;transition:background 0.15s}
 .piece{border-radius:4px;display:flex;align-items:center;justify-content:center;border:2px solid;user-select:none;position:relative;transition:transform 0.2s,box-shadow 0.2s}
-.piece.blue{background:linear-gradient(135deg,#1e40af,#1e3a8a);border-color:#3b82f6;color:#bfdbfe}
-.piece.red{background:linear-gradient(135deg,#991b1b,#7f1d1d);border-color:#ef4444;color:#fecaca}
+.piece.blue{background:linear-gradient(135deg,#1e40af,#1e3a8a);border-color:#3b82f6;color:#ffffff!important}
+.piece.red{background:linear-gradient(135deg,#991b1b,#7f1d1d);border-color:#ef4444;color:#ffffff!important}
 .piece.knight{border-radius:50%}
 .click-indicator{display:inline-flex;align-items:center;justify-content:center;background:#1f2937;border:2px solid #374151;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;color:#9ca3af;transition:all 0.15s;min-width:32px;user-select:none}
 .click-indicator.flash{background:#fbbf24;border-color:#fbbf24;color:#1a1a1a;transform:scale(0.92);box-shadow:0 0 12px rgba(251,191,36,0.6)}
@@ -195,19 +195,19 @@ function getShots(piece,pieces,team){
       const nr=row+dr*s,nc=col+dc*s;
       if(!inB(nr,nc))break;
       const isGC=(nr===og||nr===own)&&GOAL_COLS.includes(nc);
+      const isOwnGoal=nr===own&&GOAL_COLS.includes(nc);
       const o=pat(pieces,nr,nc);
       if(o){
         if(type==="P"){
-          // Portero ignora piezas en el camino — todas las celdas son válidas
           const os=o.type==="P"&&o.team!==team&&(team===TA?inBS(nr,nc):inTS(nr,nc));
-          if(os)break; // Solo se detiene ante portero rival en su área chica
-          out.push({row:nr,col:nc,isGoal:isGC,isOwn:o.team===team});
-          continue; // Sigue recorriendo más allá
+          if(os)break;
+          out.push({row:nr,col:nc,isGoal:isGC,isOwn:isOwnGoal||(o.team===team)});
+          continue;
         }
-        out.push({row:nr,col:nc,isGoal:isGC,isOwn:o.team===team});break;
+        out.push({row:nr,col:nc,isGoal:isGC,isOwn:isOwnGoal||(o.team===team)});break;
       }
       if((nr===0||nr===ROWS-1)&&!isGC)break;
-      out.push({row:nr,col:nc,isGoal:isGC,isOwn:false});
+      out.push({row:nr,col:nc,isGoal:isGC,isOwn:isOwnGoal});
       if(nr===0||nr===ROWS-1)break;
     }
   }
@@ -252,11 +252,11 @@ function cwSearch(ps,sid,dr,dc){
 // ── Iconos ────────────────────────────────────────────────────────────────────
 function makeIcon(type,team,size){
   const isA=team===TA;
-  const syms={P:"♚",R:"♛",T:"♜",C:"♞"};
-  const bg=isA?"#1e40af":"#991b1b",fg=isA?"#bfdbfe":"#fecaca",br=isA?"#3b82f6":"#ef4444";
+  const syms={P:"P",R:"R",T:"T",C:"C"};
+  const bg=isA?"#1e40af":"#991b1b",fg="white",br=isA?"#3b82f6":"#ef4444";
   const radii={C:"50%",T:"4px",P:"6px",R:"6px"};
   const d=document.createElement("div");
-  d.style.cssText=`width:${size}px;height:${size}px;border-radius:${radii[type]};background:linear-gradient(135deg,${bg},${bg}cc);border:2px solid ${br};display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*.55)}px;line-height:1;color:${fg};user-select:none`;
+  d.style.cssText=`width:${size}px;height:${size}px;border-radius:${radii[type]};background:linear-gradient(135deg,${bg},${bg}cc);border:2px solid ${br};display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*.55)}px;line-height:1;color:#ffffff;font-weight:900;user-select:none`;
   d.textContent=syms[type];return d;
 }
 
@@ -339,7 +339,7 @@ function renderGoal(){
     G.goalCallback=null;
     const ov=document.getElementById("goal-overlay-android");
     if(ov)ov.remove();
-    cb();
+    if(typeof cb==="function")cb();
   });
   screen.id="goal-overlay-android";
   const emoji=document.createElement("div");
@@ -403,7 +403,7 @@ function render(){
   else if(G.phase==="DEV_GAME")root.appendChild(renderGameLocal());
   else if(G.phase==="CPU_COACH")root.appendChild(renderCoachLocal(TA));
   else if(G.phase==="CPU_PLACE")root.appendChild(renderPlacementCPU());
-  else if(G.phase==="CPU_GAME"){root.appendChild(renderGameLocal());if(G.curTeam===TB&&!G.over&&G.gameMode==="cpu")executeCPUTurn();}
+  else if(G.phase==="CPU_GAME"){root.appendChild(renderGameLocal());if(G.curTeam===TB&&!G.over&&G.gameMode==="cpu"&&!G._cpuThinking){G._cpuThinking=true;setTimeout(()=>{G._cpuThinking=false;executeCPUTurn();},100);}}
 }
 
 // ── TUTORIAL ─────────────────────────────────────────────────────────────────
@@ -1158,9 +1158,10 @@ function renderGameLocal(){
 function renderCell(r,c,isMyTurn){
   const piece=pat(G.pieces,r,c);
   const isBall=G.ball.row===r&&G.ball.col===c;
-  const isSel=piece?.id===G.sel;
-  const isMove=!!G.moves.find(m=>m.row===r&&m.col===c);
-  const isShot=G.shots.find(s=>s.row===r&&s.col===c)||null;
+  const isCPUTurn=G.gameMode==="cpu"&&G.curTeam===TB;
+  const isSel=!isCPUTurn&&(piece?.id===G.sel);
+  const isMove=!isCPUTurn&&!!G.moves.find(m=>m.row===r&&m.col===c);
+  const isShot=!isCPUTurn&&(G.shots.find(s=>s.row===r&&s.col===c)||null);
   const bg=cellBg(r,c);
   const ov=isShot?(isShot.isGoal?"rgba(220,38,38,0.75)":isShot.isOwn?"rgba(37,99,235,0.65)":"rgba(234,88,12,0.6)"):isMove?"rgba(234,179,8,0.55)":isSel?"rgba(255,255,255,0.15)":"";
   const fbg=ov?`linear-gradient(${ov},${ov}),${bg}`:bg;
@@ -1175,7 +1176,12 @@ function renderCell(r,c,isMyTurn){
   if(piece){
     const rad={C:"50%",T:"4px",P:"6px",R:"6px"}[piece.type];
     const pw=mkD({position:"relative",transform:isSel?"scale(1.12)":"scale(1)",transition:"all 0.1s"});
-    const ow=mkD({outline:isSel?`2px solid ${selC}`:"none",outlineOffset:"2px",borderRadius:rad,boxShadow:isSel?`0 0 12px ${selC}`:"none"});
+    // Shot target on piece: orange ring (pass) or red ring (goal)
+    const shotRing=isShot?(isShot.isGoal?"0 0 0 2px #ef4444, 0 0 8px #ef4444":"0 0 0 2px #ea580c, 0 0 8px #ea580c"):null;
+    const selShadow=isSel?`0 0 12px ${selC}`:null;
+    const shadow=shotRing||selShadow||"none";
+    const outline=isSel&&!isShot?`2px solid ${selC}`:"none";
+    const ow=mkD({outline,outlineOffset:"2px",borderRadius:rad,boxShadow:shadow});
     ow.appendChild(makeIcon(piece.type,piece.team,CS-8));
     pw.appendChild(ow);
     if(isBall){const b=mkD({position:"absolute",bottom:"-9px",right:"-9px",fontSize:"15px",zIndex:"7"});b.textContent="⚽";pw.appendChild(b);}
@@ -1247,12 +1253,33 @@ function execMove(pid,r,c){
   if(dest&&dest.team===piece.team){addLog("No puedes ir sobre un companero.");render();return;}
   if(dest&&dest.type==="P"&&oppDest){const inL=piece.team===TA?inBL(r,c):inTL(r,c);if(inL){addLog("Portero protegido.");render();return;}}
   if(dest&&oppDest&&!destBall){addLog("El rival no tiene el balon.");render();return;}
-  const km=piece.type==="C"?getMoves({...piece,hasBall:myBall},G.pieces,myBall?G.adv:0,G.ball):[];
+  // Validate move distance for ALL piece types
+  const validMoves=getMoves({...piece,hasBall:myBall},G.pieces,myBall?G.adv:0,G.ball);
+  if(!validMoves.find(m=>m.row===r&&m.col===c)){
+    if(G.gameMode==="cpu"&&G.curTeam===TB){
+      // CPU picked an invalid move — retry with a validated one
+      const retry=getAllMoves(G.pieces,G.ball,TB).find(m=>{
+        const p2=G.pieces.find(x=>x.id===m.pid);if(!p2)return false;
+        const hb2=p2.row===G.ball.row&&p2.col===G.ball.col;
+        const vm2=getMoves({...p2,hasBall:hb2},G.pieces,hb2?G.adv:0,G.ball);
+        return vm2.find(x=>x.row===m.toR&&x.col===m.toC);
+      });
+      if(retry){execMove(retry.pid,retry.toR,retry.toC);}
+      else{G.curTeam=TA;G.bonus=false;G.adv=0;addLog("CPU: sin movimiento.");render();}
+      return;
+    }
+    addLog("Movimiento no válido.");render();return;
+  }
+  const km=piece.type==="C"?validMoves:[];
   const mf=piece.type==="C"&&km.find(m=>m.row===r&&m.col===c&&m.steal);
   const sad=destBall&&oppDest,sop=!!(mf&&!myBall&&!destBall&&mf.stealPath),fb=destBall&&!dest;
   const stole=(sad||sop||fb)&&!myBall;
   let np=G.pieces;
-  if(sad&&dest)np=bumpPiece(np,dest,pid,moveDr,moveDc);
+  if(sad&&dest){
+    const bumped=bumpPiece(np,dest,pid,moveDr,moveDc);
+    if(bumped&&Array.isArray(bumped))np=bumped;
+  }
+  if(!np||!Array.isArray(np))np=G.pieces;
   np=np.map(p=>p.id===pid?{...p,row:r,col:c}:p);
   const newBall=(myBall||stole)?{row:r,col:c}:G.ball;
   G.pieces=np;G.ball=newBall;G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;
@@ -1293,7 +1320,6 @@ function execShot(cell){
       if(G.myTeam)publishOnline({logMsg:msg+" Equipo "+kTeam+" saca."});render();
     };
     G.ball={row:cell.row,col:cell.col};
-    render();
     showGoalCelebration(scorer,false,resetOnline);return;
   }
   if((cell.row===0||cell.row===BOT_GOAL)&&!GOAL_COLS.includes(cell.col)){addLog("El balon no puede ir ahi.");render();return;}
@@ -1372,7 +1398,7 @@ function buildBoard(r0,r1,pieces=[],ball=null){
   return{wrap,cells};
 }
 
-const SYMS={P:"♚",R:"♛",T:"♜",C:"♞"};
+const SYMS={P:"P",R:"R",T:"T",C:"C"};
 function makePieceEl(team,type,id){
   const el=document.createElement("div");
   el.className=`piece ${team}${type==="C"?" knight":""}`;
@@ -1405,7 +1431,7 @@ function movePiece(cells,fr,fc,tr,tc,hasBall){
   if(hasBall){dst.style.position="relative";dst.appendChild(makeBallEl());}
 }
 
-function bumpPiece(cells,fr,fc,tr,tc){
+function tutBumpPiece(cells,fr,fc,tr,tc){
   const src=cells[`${fr},${fc}`],dst=cells[`${tr},${tc}`];if(!src||!dst)return;
   const piece=src.querySelector(".piece.red");if(!piece)return;
   src.removeChild(piece);dst.appendChild(piece);
@@ -1661,7 +1687,7 @@ const SCENES=[
         clearCls(cells,"cell-selected");
         const bt=document.getElementById("rb-bt");if(bt)bt.style.boxShadow="";
         const rr=document.getElementById("rb-rr");if(rr)rr.style.boxShadow="";
-        bumpPiece(cells,8,4,9,4);addLabel(cells,9,4,"desplazada ↓","#ef4444");
+        tutBumpPiece(cells,8,4,9,4);addLabel(cells,9,4,"desplazada ↓","#ef4444");
         movePiece(cells,10,4,8,4,true);addLabel(cells,8,4,"💪 ROBO!","#34d399");
         c2.style.background="#ef4444";c2.style.color="white";
       },2200);
@@ -1769,6 +1795,7 @@ function tutRenderScene(idx){
   clearLoops();tutCur=idx;
   const data=SCENES[idx]();
   const sceneEl=document.getElementById("tut-scene");
+  if(!sceneEl)return;
   sceneEl.innerHTML="";
   const title=document.createElement("div");title.className="scene-title";title.textContent=data.title;sceneEl.appendChild(title);
   sceneEl.appendChild(data.el);
@@ -1796,6 +1823,215 @@ function tutInit(onClose){
   window._tutOnClose=onClose;
   tutCur=0;
   tutRenderScene(0);
+}
+
+// ── CPU AI ────────────────────────────────────────────────────────────────────
+function evaluateBoard(pieces,ball){
+  const hasBallB=pieces.find(p=>p.team===TB&&p.row===ball.row&&p.col===ball.col);
+  const hasBallA=pieces.find(p=>p.team===TA&&p.row===ball.row&&p.col===ball.col);
+  let score=0;
+  if(hasBallB)score+=300;
+  if(hasBallA)score-=300;
+  const distToOpp=ball.row;
+  const distToOwn=BOT_GOAL-ball.row;
+  score+=(BOT_GOAL-distToOpp)*8;
+  score-=(BOT_GOAL-distToOwn)*3;
+  if(ball.row===TOP_GOAL&&GOAL_COLS.includes(ball.col))score=10000;  // CPU scores
+  if(ball.row===BOT_GOAL&&GOAL_COLS.includes(ball.col))score=-10000; // own goal
+  pieces.forEach(p=>{
+    const dist=Math.abs(p.row-ball.row)+Math.abs(p.col-ball.col);
+    if(p.team===TB)score+=Math.max(0,10-dist)*5;
+    else score-=Math.max(0,10-dist)*3;
+  });
+  pieces.forEach(p=>{
+    if(p.team===TB)score+=(BOT_GOAL-p.row)*2;
+    else score+=p.row*2;
+  });
+  if(hasBallB){
+    const shots=getShots(hasBallB,pieces,TB);
+    const goalShots=shots.filter(s=>s.isGoal&&!s.isOwn);
+    score+=goalShots.length*500;
+    score+=shots.length*20;
+  }
+  return score;
+}
+
+function applyMoveState(pieces,ball,move){
+  let np=JSON.parse(JSON.stringify(pieces));
+  let nb={...ball};
+  const{pid,toR,toC,isShot,isGoal,isOwn}=move;
+  const piece=np.find(p=>p.id===pid);
+  if(!piece)return{pieces:np,ball:nb};
+  if(isShot){
+    nb={row:toR,col:toC};
+  } else {
+    const myBall=piece.row===ball.row&&piece.col===ball.col;
+    const destBall=ball.row===toR&&ball.col===toC;
+    const dest=pat(np,toR,toC);
+    if(dest&&dest.team!==piece.team&&destBall){
+      const br=piece.team===TA?1:-1;
+      for(const[dr,dc]of[[br,0],[0,1],[0,-1],[br,1],[br,-1]]){
+        const nr=dest.row+dr,nc=dest.col+dc;
+        if(nr>=1&&nr<=ROWS-2&&inB(nr,nc)&&!np.find(p=>p.row===nr&&p.col===nc)){
+          np=np.map(p=>p.id===dest.id?{...p,row:nr,col:nc}:p);break;
+        }
+      }
+    }
+    np=np.map(p=>p.id===pid?{...p,row:toR,col:toC}:p);
+    if(myBall||destBall)nb={row:toR,col:toC};
+  }
+  return{pieces:np,ball:nb};
+}
+
+function getAllMoves(pieces,ball,team){
+  const moves=[];
+  pieces.filter(p=>p.team===team).forEach(piece=>{
+    const hasBall=piece.row===ball.row&&piece.col===ball.col;
+    // Get movement moves
+    getMoves({...piece,hasBall},pieces,0,ball).forEach(m=>{
+      moves.push({pid:piece.id,toR:m.row,toC:m.col,isShot:false,steal:m.steal});
+    });
+    // Get shot moves (only if piece has ball OR it's a free ball on its cell)
+    const ballOnPiece=ball.row===piece.row&&ball.col===piece.col;
+    if(ballOnPiece){
+      getShots(piece,pieces,team).forEach(s=>{
+        if(s.isGoal&&s.isOwn)return; // never own goal
+        moves.push({pid:piece.id,toR:s.row,toC:s.col,isShot:true,isGoal:!!s.isGoal,isOwn:!!s.isOwn});
+      });
+    }
+  });
+  // If CPU has no ball, ensure at least one piece can move toward ball
+  if(team===TB&&!pieces.find(p=>p.team===TB&&p.row===ball.row&&p.col===ball.col)){
+    if(moves.length===0){
+      // Emergency: find any TB piece and give it a dummy move
+      const anyPiece=pieces.find(p=>p.team===TB);
+      if(anyPiece) moves.push({pid:anyPiece.id,toR:anyPiece.row,toC:anyPiece.col,isShot:false,steal:false});
+    }
+  }
+  return moves;
+}
+
+function minimax(pieces,ball,depth,alpha,beta,maximizing){
+  const score=evaluateBoard(pieces,ball);
+  if(Math.abs(score)>=1000||depth===0)return score;
+  const team=maximizing?TB:TA;
+  const moves=getAllMoves(pieces,ball,team);
+  if(!moves.length)return score;
+  if(maximizing){
+    let best=-Infinity;
+    for(const move of moves){
+      const{pieces:np,ball:nb}=applyMoveState(pieces,ball,move);
+      const val=minimax(np,nb,depth-1,alpha,beta,false);
+      best=Math.max(best,val);alpha=Math.max(alpha,val);
+      if(beta<=alpha)break;
+    }
+    return best;
+  } else {
+    let best=Infinity;
+    for(const move of moves){
+      const{pieces:np,ball:nb}=applyMoveState(pieces,ball,move);
+      const val=minimax(np,nb,depth-1,alpha,beta,true);
+      best=Math.min(best,val);beta=Math.min(beta,val);
+      if(beta<=alpha)break;
+    }
+    return best;
+  }
+}
+
+function getBestCPUMove(){
+  const moves=getAllMoves(G.pieces,G.ball,TB);
+  if(!moves.length)return null;
+
+  // Priority 1: direct goal shot
+  const goalShot=moves.find(m=>m.isShot&&m.isGoal&&!m.isOwn);
+  if(goalShot)return goalShot;
+
+  // Priority 2: if portero has ball, prioritize shooting or advancing
+  const ballHolder=G.pieces.find(p=>p.team===TB&&p.row===G.ball.row&&p.col===G.ball.col);
+  if(ballHolder&&ballHolder.type==="P"){
+    // Find best shot move for portero first
+    const porterShots=moves.filter(m=>m.pid===ballHolder.id&&m.isShot);
+    if(porterShots.length){
+      // Pick shot closest to opponent goal (row 0)
+      porterShots.sort((a,b)=>a.toR-b.toR);
+      return porterShots[0];
+    }
+  }
+
+  // Priority 3: minimax
+  let bestMove=null,bestScore=-Infinity;
+  for(const move of moves){
+    const{pieces:np,ball:nb}=applyMoveState(G.pieces,G.ball,move);
+    const val=minimax(np,nb,2,-Infinity,Infinity,false);
+    if(val>bestScore){bestScore=val;bestMove=move;}
+  }
+  // Fallback: pick first available move
+  return bestMove||moves[0];
+}
+
+function executeCPUTurn(){
+  if(G.curTeam!==TB||G.over||G.gameMode!=="cpu")return;
+  
+  // Safety: if CPU is stuck, pass turn to human after timeout
+  const safetyTimer=setTimeout(()=>{
+    if(G.curTeam===TB&&G.gameMode==="cpu"&&!G.over){
+      G.curTeam=TA;G.bonus=false;G.stealerId=null;G.adv=0;
+      addLog("CPU pasó turno.");render();
+    }
+  },3000);
+
+  let move;
+  try{ move=getBestCPUMove(); }
+  catch(e){ clearTimeout(safetyTimer);G.curTeam=TA;render();return; }
+
+  if(!move){
+    clearTimeout(safetyTimer);
+    G.curTeam=TA;G.bonus=false;G.stealerId=null;G.adv=0;
+    addLog("CPU sin movimientos.");render();return;
+  }
+
+  setTimeout(()=>{
+    clearTimeout(safetyTimer);
+    if(G.curTeam!==TB||G.over)return;
+    try{
+      if(move.isShot){
+        execShot({row:move.toR,col:move.toC,isGoal:!!move.isGoal,isOwn:!!move.isOwn});
+      } else {
+        // Validate move is still legal before executing
+        const piece=G.pieces.find(p=>p.id===move.pid);
+        if(!piece){G.curTeam=TA;render();return;}
+        const hasBall=piece.row===G.ball.row&&piece.col===G.ball.col;
+        const legalMoves=getMoves({...piece,hasBall},G.pieces,0,G.ball);
+        const isLegal=legalMoves.find(m=>m.row===move.toR&&m.col===move.toC);
+        if(isLegal){
+          execMove(move.pid,move.toR,move.toC);
+        } else {
+          // Move became invalid, try another
+          const allMoves=getAllMoves(G.pieces,G.ball,TB);
+          const fallback=allMoves.find(m=>{
+            const p=G.pieces.find(x=>x.id===m.pid);if(!p)return false;
+            const hb=p.row===G.ball.row&&p.col===G.ball.col;
+            const lm=getMoves({...p,hasBall:hb},G.pieces,0,G.ball);
+            return lm.find(x=>x.row===m.toR&&x.col===m.toC);
+          });
+          if(fallback) execMove(fallback.pid,fallback.toR,fallback.toC);
+          else{G.curTeam=TA;G.bonus=false;G.adv=0;addLog("CPU: sin movimiento válido.");render();}
+        }
+      }
+    }catch(e){
+      G.curTeam=TA;G.bonus=false;render();
+    }
+    if(G.curTeam===TB&&G.bonus&&G.gameMode==="cpu"&&!G.over){
+      setTimeout(executeCPUTurn,600);
+    }
+  },500);
+}
+
+function renderPlacementCPU(){
+  G.fmB=G.fmB||FMTS[Math.floor(Math.random()*FMTS.length)];
+  G.placementPieces=buildAll(G.fmA,G.fmB,TA);
+  G.phase="DEV_PLACE";
+  return renderPlacementLocal();
 }
 
 render();
