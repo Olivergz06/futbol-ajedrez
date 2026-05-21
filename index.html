@@ -176,7 +176,12 @@ function getMoves(piece,pieces,advUsed,ball){
       if(!inB(nr,nc)||nr===0||nr===ROWS-1)continue;
       const o=pat(pieces,nr,nc);
       if(o&&o.team===team)continue;
-      if(o&&o.type==="P"&&o.team!==team){const inL=team===TA?inBL(nr,nc):inTL(nr,nc);if(inL)continue;}
+      // El Caballo puede caer sobre el Portero
+      // excepto si el Portero está en área chica
+      if(o&&o.type==="P"&&o.team!==team){
+        const protectedSmall=team===TA?inBS(nr,nc):inTS(nr,nc);
+        if(protectedSmall)continue;
+      }
       const adr=Math.abs(dr),adc=Math.abs(dc),sdr=sg(dr),sdc=sg(dc);
       let pb=false;
       for(let s=1;s<adr;s++){const op=pat(pieces,row+sdr*s,col);if(op&&op.type==="P"){pb=true;break;}}
@@ -204,19 +209,57 @@ function getMoves(piece,pieces,advUsed,ball){
   const dirs=type==="T"?[[0,1],[0,-1],[1,0],[-1,0]]:[[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
   for(const[dr,dc]of dirs){
     for(let s=1;s<=max;s++){
-      const nr=clamp(row+dr*s,1,ROWS-2),nc=clamp(col+dc*s,0,COLS-1);
+      const nr=row+dr*s;
+      const nc=col+dc*s;
+
+      // Detener si sale del tablero
+      if(!inB(nr,nc) || nr===0 || nr===ROWS-1)break;
+
       const o=pat(pieces,nr,nc);
       const ibh=!!(ball&&ball.row===nr&&ball.col===nc);
-      if(o){if(o.team!==team&&ibh)moves.push({row:nr,col:nc,steal:true,stealPath:false});break;}
-      if(ibh&&!hasBall){const bo=pat(pieces,nr,nc);if(!bo||bo.team!==team)moves.push({row:nr,col:nc,steal:true,stealPath:false});break;}
-      moves.push({row:nr,col:nc,steal:false,stealPath:false});
-      if(row+dr*s!==nr||col+dc*s!==nc)break;
+
+      // Pieza enemiga con balón
+      if(o){
+        if(o.team!==team&&ibh){
+          moves.push({
+            row:nr,
+            col:nc,
+            steal:true,
+            stealPath:false
+          });
+        }
+        break;
+      }
+
+      // Balón libre
+      if(ibh&&!hasBall){
+        const bo=pat(pieces,nr,nc);
+
+        if(!bo||bo.team!==team){
+          moves.push({
+            row:nr,
+            col:nc,
+            steal:true,
+            stealPath:false
+          });
+        }
+
+        break;
+      }
+
+      moves.push({
+        row:nr,
+        col:nc,
+        steal:false,
+        stealPath:false
+      });
     }
   }
   return moves;
 }
 
 function getShots(piece,pieces,team){
+
   const{type,row,col}=piece;
   const maxD=type==="P"?9:5;
   const og=team===TA?BOT_GOAL:TOP_GOAL,own=team===TA?TOP_GOAL:BOT_GOAL;
@@ -244,9 +287,10 @@ function getShots(piece,pieces,team){
       });
     });
 
-    return out;
+    // El caballo también puede disparar normal
   }
 
+  // Disparo normal para todas las piezas
   for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]]){
     for(let s=1;s<=maxD;s++){
       const nr=row+dr*s,nc=col+dc*s;
@@ -541,6 +585,7 @@ function render(){
   else if(G.phase==="ONLINE_PUBLIC")root.appendChild(renderPublicRooms());
   else if(G.phase==="ONLINE_PRIVATE")root.appendChild(renderLobby());
   else if(G.phase==="RANKING")root.appendChild(renderRanking());
+  else if(G.phase==="AUTH")root.appendChild(renderAuth());
   else if(G.phase==="ONLINE_COACH")root.appendChild(renderCoach(G.myTeam,true));
   else if(G.phase==="ONLINE_WAIT_FM")root.appendChild(renderWaiting("Esperando formacion del rival..."));
   else if(G.phase==="ONLINE_PLACE")root.appendChild(renderOnlinePlacement());
@@ -781,6 +826,180 @@ function renderCPULevel(){
 
 
 
+
+
+function renderAuth(){
+  const screen=mkD({
+    minHeight:"100vh",
+    background:"#0a1628",
+    display:"flex",
+    alignItems:"center",
+    justifyContent:"center",
+    padding:"20px"
+  });
+
+  const card=mkD({
+    width:"100%",
+    maxWidth:"420px",
+    background:"#0f1c2e",
+    border:"2px solid #3b82f6",
+    borderRadius:"18px",
+    padding:"28px",
+    display:"flex",
+    flexDirection:"column",
+    gap:"12px"
+  });
+
+  card.appendChild(mkT(
+    "👤 CREAR USUARIO",
+    {
+      fontSize:"22px",
+      fontWeight:"900",
+      color:"white",
+      letterSpacing:"2px",
+      textAlign:"center",
+      marginBottom:"6px"
+    }
+  ));
+
+  card.appendChild(mkT(
+    "Conecta tu cuenta para ranking y estadísticas",
+    {
+      fontSize:"11px",
+      color:"#94a3b8",
+      textAlign:"center",
+      marginBottom:"10px",
+      lineHeight:"1.6"
+    }
+  ));
+
+  const email=document.createElement("input");
+  email.placeholder="Correo electrónico";
+
+  email.style.cssText=`
+    width:100%;
+    background:#111827;
+    border:2px solid #374151;
+    border-radius:12px;
+    padding:14px;
+    color:white;
+    font-family:monospace;
+    font-size:13px;
+  `;
+
+  const username=document.createElement("input");
+  username.placeholder="Nombre de usuario";
+
+  username.style.cssText=email.style.cssText;
+
+  const password=document.createElement("input");
+  password.type="password";
+  password.placeholder="Contraseña";
+
+  password.style.cssText=email.style.cssText;
+
+  const status=mkD({
+    fontSize:"11px",
+    color:"#94a3b8",
+    textAlign:"center",
+    minHeight:"18px"
+  });
+
+  const btn=document.createElement("button");
+
+  btn.textContent="🚀 CREAR CUENTA";
+
+  btn.style.cssText=`
+    width:100%;
+    background:linear-gradient(135deg,#2563eb,#1e3a8a);
+    border:2px solid #60a5fa;
+    border-radius:12px;
+    color:white;
+    padding:14px;
+    font-family:monospace;
+    font-size:12px;
+    font-weight:900;
+    letter-spacing:2px;
+    cursor:pointer;
+  `;
+
+  btn.onclick=async()=>{
+    const em=email.value.trim();
+    const us=username.value.trim();
+    const pw=password.value.trim();
+
+    if(!em||!us||!pw){
+      status.textContent="Completa todos los campos.";
+      status.style.color="#f87171";
+      return;
+    }
+
+    try{
+      status.textContent="Creando cuenta...";
+      status.style.color="#94a3b8";
+
+      const {data,error}=await sb.auth.signUp({
+        email:em,
+        password:pw
+      });
+
+      if(error){
+        status.textContent=error.message;
+        status.style.color="#f87171";
+        return;
+      }
+
+      if(data.user){
+        await sb.from("profiles").insert({
+          id:data.user.id,
+          username:us,
+          elo:1200,
+          wins:0,
+          losses:0,
+          points:0
+        });
+
+        status.textContent="✅ Cuenta creada correctamente";
+        status.style.color="#34d399";
+      }
+
+    }catch(e){
+      status.textContent="Error creando cuenta.";
+      status.style.color="#f87171";
+    }
+  };
+
+  const back=document.createElement("button");
+  back.textContent="← Volver";
+
+  back.style.cssText=`
+    width:100%;
+    background:transparent;
+    border:1px solid #374151;
+    border-radius:10px;
+    color:#9ca3af;
+    padding:10px;
+    font-family:monospace;
+    cursor:pointer;
+  `;
+
+  back.onclick=()=>{
+    G.phase="RANKING";
+    render();
+  };
+
+  card.appendChild(email);
+  card.appendChild(username);
+  card.appendChild(password);
+  card.appendChild(status);
+  card.appendChild(btn);
+  card.appendChild(back);
+
+  screen.appendChild(card);
+
+  return screen;
+}
+
 function renderRanking(){
   const screen=mkD({
     minHeight:"100vh",
@@ -806,6 +1025,32 @@ function renderRanking(){
     marginBottom:"8px"
   }));
 
+  const authBtn=document.createElement("button");
+
+  authBtn.textContent="👤 CREAR USUARIO";
+
+  authBtn.style.cssText=`
+    width:100%;
+    background:linear-gradient(135deg,#2563eb,#1e3a8a);
+    border:2px solid #60a5fa;
+    border-radius:12px;
+    color:white;
+    padding:14px;
+    font-family:monospace;
+    font-size:12px;
+    font-weight:900;
+    letter-spacing:2px;
+    cursor:pointer;
+    margin-bottom:14px;
+  `;
+
+  authBtn.onclick=()=>{
+    G.phase="AUTH";
+    render();
+  };
+
+  card.appendChild(authBtn);
+
   card.appendChild(mkT(
     "Próximamente conectado con Supabase Auth y ELO",
     {
@@ -816,12 +1061,7 @@ function renderRanking(){
     }
   ));
 
-  const mockPlayers=[
-    {name:"ElMatador77",elo:1450,wins:18},
-    {name:"KnightKing",elo:1380,wins:15},
-    {name:"ChessGoolBot",elo:1300,wins:12},
-    {name:"TorreMaster",elo:1260,wins:11},
-  ];
+  const mockPlayers=[];
 
   mockPlayers.forEach((p,i)=>{
     const row=mkD({
@@ -2463,7 +2703,7 @@ function showFullRules(){
 
     {t:"♜ TORRE",d:"Se mueve hasta 4 casillas en línea recta. Mantiene movimiento completo con balón."},
 
-    {t:"♞ CABALLO",d:"Se mueve en L (3+1 ó 1+3). Salta piezas. También dispara en movimiento L."},
+    {t:"♞ CABALLO",d:"Se mueve en L (3+1 ó 1+3). Puede disparar normal y también en L. Puede caer sobre el Portero si está fuera del área chica."},
 
     {t:"♛ REYNA",d:"Se mueve hasta 3 casillas en 8 direcciones."},
 
@@ -2780,8 +3020,18 @@ function executeCPUTurn(){
 
   if(!move){
     clearTimeout(safetyTimer);
-    G.curTeam=TA;G.bonus=false;G.stealerId=null;G.adv=0;
-    addLog("CPU sin movimientos.");render();return;
+
+    // Buscar cualquier movimiento legal antes de pasar turno
+    const fallbackMoves=getAllMoves(G.pieces,G.ball,TB);
+
+    if(fallbackMoves.length>0){
+      move=fallbackMoves[Math.floor(Math.random()*fallbackMoves.length)];
+    }else{
+      // Nunca pasar turno silenciosamente
+      addLog("⚠️ CPU bloqueada.");
+      render();
+      return;
+    }
   }
 
   setTimeout(()=>{
@@ -2809,7 +3059,28 @@ function executeCPUTurn(){
             return lm.find(x=>x.row===m.toR&&x.col===m.toC);
           });
           if(fallback) execMove(fallback.pid,fallback.toR,fallback.toC);
-          else{G.curTeam=TA;G.bonus=false;G.adv=0;addLog("CPU: sin movimiento válido.");render();}
+          else{
+            // Último fallback: movimiento aleatorio legal
+            const emergencyMoves=getAllMoves(G.pieces,G.ball,TB);
+
+            if(emergencyMoves.length>0){
+              const em=emergencyMoves[Math.floor(Math.random()*emergencyMoves.length)];
+
+              if(em.isShot){
+                execShot({
+                  row:em.toR,
+                  col:em.toC,
+                  isGoal:!!em.isGoal,
+                  isOwn:!!em.isOwn
+                });
+              }else{
+                execMove(em.pid,em.toR,em.toC);
+              }
+            }else{
+              addLog("⚠️ CPU completamente bloqueada.");
+              render();
+            }
+          }
         }
       }
     }catch(e){
