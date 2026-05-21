@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
-<title>ChessGol Online</title><!-- v1779342055 -->
+<title>ChessGol Online V2</title><!-- v1779342055 -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -32,8 +32,8 @@ body{background:#0a1628;font-family:monospace;color:white;overflow:hidden;height
 .board{display:grid}
 .cell{display:flex;align-items:center;justify-content:center;position:relative;transition:background 0.15s}
 .piece{border-radius:4px;display:flex;align-items:center;justify-content:center;border:2px solid;user-select:none;position:relative;transition:transform 0.2s,box-shadow 0.2s}
-.piece.blue{background:linear-gradient(135deg,#1e40af,#1e3a8a);border-color:#3b82f6;color:#ffffff!important}
-.piece.red{background:linear-gradient(135deg,#991b1b,#7f1d1d);border-color:#ef4444;color:#ffffff!important}
+.piece.blue{background:linear-gradient(135deg,#1e40af,#1e3a8a);border-color:#3b82f6;color:#ffffff!important;text-shadow:0 0 4px rgba(255,255,255,0.45)}
+.piece.red{background:linear-gradient(135deg,#991b1b,#7f1d1d);border-color:#ef4444;color:#ffffff!important;text-shadow:0 0 4px rgba(255,255,255,0.45)}
 .piece.knight{border-radius:50%}
 .click-indicator{display:inline-flex;align-items:center;justify-content:center;background:#1f2937;border:2px solid #374151;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;color:#9ca3af;transition:all 0.15s;min-width:32px;user-select:none}
 .click-indicator.flash{background:#fbbf24;border-color:#fbbf24;color:#1a1a1a;transform:scale(0.92);box-shadow:0 0 12px rgba(251,191,36,0.6)}
@@ -53,6 +53,37 @@ body{background:#0a1628;font-family:monospace;color:white;overflow:hidden;height
 .nav-btn{background:#1f2937;border:1px solid #374151;border-radius:8px;color:white;padding:7px 18px;cursor:pointer;font-family:monospace;font-size:11px;font-weight:700;letter-spacing:1px;transition:all 0.2s}
 .nav-btn.next{background:#10b981;border-color:#10b981;color:#052e16}
 .nav-btn:disabled{opacity:0.3;cursor:default}
+
+
+
+@keyframes trophyPop{
+  0%{transform:scale(0.4) rotate(-6deg);opacity:0}
+  60%{transform:scale(1.15) rotate(3deg);opacity:1}
+  100%{transform:scale(1)}
+}
+
+.pixel-trophy{
+  image-rendering:pixelated;
+  font-size:120px;
+  line-height:1;
+  filter:
+    drop-shadow(0 0 12px rgba(255,215,0,0.7))
+    drop-shadow(0 0 24px rgba(255,200,0,0.4));
+  animation:trophyPop .8s ease;
+}
+
+.winner-overlay{
+  position:fixed;
+  inset:0;
+  z-index:99999999;
+  background:rgba(0,0,0,0.72);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:18px;
+  backdrop-filter:blur(4px);
+}
 
 </style>
 </head>
@@ -169,7 +200,7 @@ function getMoves(piece,pieces,advUsed,ball){
     return moves;
   }
   let max=PMOVE[type];
-  if(hasBall){if(type==="R"||type==="T")max=3;else max=Math.max(1,max-advUsed-1);}
+// Las piezas mantienen su movimiento completo aunque tengan balón
   const dirs=type==="T"?[[0,1],[0,-1],[1,0],[-1,0]]:[[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
   for(const[dr,dc]of dirs){
     for(let s=1;s<=max;s++){
@@ -190,6 +221,32 @@ function getShots(piece,pieces,team){
   const maxD=type==="P"?9:5;
   const og=team===TA?BOT_GOAL:TOP_GOAL,own=team===TA?TOP_GOAL:BOT_GOAL;
   const out=[];
+
+  // Caballo dispara en L
+  if(type==="C"){
+    const knightShots=[
+      [3,1],[3,-1],[-3,1],[-3,-1],
+      [1,3],[1,-3],[-1,3],[-1,-3]
+    ];
+
+    knightShots.forEach(([dr,dc])=>{
+      const nr=row+dr,nc=col+dc;
+      if(!inB(nr,nc))return;
+
+      const isGC=(nr===og||nr===own)&&GOAL_COLS.includes(nc);
+      const isOwnGoal=nr===own&&GOAL_COLS.includes(nc);
+
+      out.push({
+        row:nr,
+        col:nc,
+        isGoal:isGC,
+        isOwn:isOwnGoal
+      });
+    });
+
+    return out;
+  }
+
   for(const[dr,dc]of[[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]]){
     for(let s=1;s<=maxD;s++){
       const nr=row+dr*s,nc=col+dc*s;
@@ -252,11 +309,16 @@ function cwSearch(ps,sid,dr,dc){
 // ── Iconos ────────────────────────────────────────────────────────────────────
 function makeIcon(type,team,size){
   const isA=team===TA;
-  const syms={P:"P",R:"R",T:"T",C:"C"};
+  const syms={
+    P:"♔",
+    R:"♕",
+    T:"♖",
+    C:"♘"
+  };
   const bg=isA?"#1e40af":"#991b1b",fg="white",br=isA?"#3b82f6":"#ef4444";
   const radii={C:"50%",T:"4px",P:"6px",R:"6px"};
   const d=document.createElement("div");
-  d.style.cssText=`width:${size}px;height:${size}px;border-radius:${radii[type]};background:linear-gradient(135deg,${bg},${bg}cc);border:2px solid ${br};display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*.55)}px;line-height:1;color:#ffffff;font-weight:900;user-select:none`;
+  d.style.cssText=`width:${size}px;height:${size}px;border-radius:${radii[type]};background:linear-gradient(135deg,${bg},${bg}cc);border:2px solid ${br};display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*.62)}px;line-height:1;color:#ffffff;font-weight:900;text-shadow:0 0 4px rgba(255,255,255,0.45);user-select:none`;
   d.textContent=syms[type];return d;
 }
 
@@ -297,7 +359,9 @@ const G={
   stealerId:null,stealerDir:{dr:1,dc:0},
   log:["Bienvenido a Futbol Ajedrez"],
   repoPieces:null,repoKickTeam:null,placementPieces:null,
-  roomCode:null,myTeam:null,onlineChannel:null,
+  roomCode:null,myTeam:null,onlineChannel:null,cpuLevel:"normal",
+  matchStart:Date.now(),
+  movesCount:0,
 };
 
 function addLog(msg){G.log=[msg,...G.log].slice(0,30);}
@@ -310,6 +374,89 @@ function showGoalCelebration(scorer, isChampion, onDismiss){
   G.prevPhase=G.phase;
   G.phase="GOAL";
   render();
+}
+
+
+
+function showWinnerCelebration(team){
+  const existing=document.getElementById("winner-overlay");
+  if(existing)existing.remove();
+
+  const ov=document.createElement("div");
+  ov.id="winner-overlay";
+  ov.className="winner-overlay";
+
+  const trophy=document.createElement("div");
+  trophy.className="pixel-trophy";
+  trophy.textContent="🏆";
+
+  const title=document.createElement("div");
+  title.style.cssText="font-size:clamp(34px,10vw,78px);font-weight:900;color:#fbbf24;letter-spacing:4px;text-shadow:0 0 18px rgba(255,215,0,0.6);text-align:center;font-family:monospace";
+  title.textContent="CAMPEÓN";
+
+  const teamTxt=document.createElement("div");
+  teamTxt.style.cssText=`font-size:clamp(18px,5vw,34px);font-weight:900;color:${team===TA?"#60a5fa":"#f87171"};letter-spacing:3px;text-align:center;font-family:monospace`;
+  teamTxt.textContent=team===TA?"🔵 EQUIPO AZUL":"🔴 EQUIPO ROJO";
+
+  const finalTxt=document.createElement("div");
+  finalTxt.style.cssText="font-size:14px;color:#cbd5e1;text-align:center;max-width:320px;line-height:1.7;font-family:monospace";
+  finalTxt.innerHTML=`Partido terminado<br>Resultado final:<br>${G.score.A} - ${G.score.B}`;
+
+  const stats=document.createElement("div");
+  stats.style.cssText="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:14px 20px;text-align:center;font-family:monospace";
+
+  const duration=Math.floor((Date.now()-G.matchStart)/1000);
+
+  stats.innerHTML=`
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:6px">ESTADÍSTICAS</div>
+    <div style="font-size:13px;color:white;font-weight:700">
+      ⏱️ ${Math.floor(duration/60)}m ${duration%60}s
+    </div>
+    <div style="font-size:13px;color:white;font-weight:700;margin-top:4px">
+      🎮 ${G.movesCount} movimientos
+    </div>
+  `;
+
+  const btn=document.createElement("button");
+  btn.textContent="⚽ VOLVER AL MENÚ";
+  btn.style.cssText="margin-top:10px;background:linear-gradient(135deg,#92400e,#451a03);border:2px solid #fbbf24;border-radius:14px;color:white;padding:14px 28px;font-family:monospace;font-size:13px;font-weight:900;letter-spacing:2px;cursor:pointer";
+
+  btn.onclick=()=>{
+    ov.remove();
+    G.phase="MENU";
+    render();
+  };
+
+  ov.appendChild(trophy);
+  ov.appendChild(title);
+  ov.appendChild(teamTxt);
+  ov.appendChild(finalTxt);
+  ov.appendChild(stats);
+  ov.appendChild(btn);
+
+  document.body.appendChild(ov);
+
+  validateMatchResult(team);
+}
+
+async function validateMatchResult(winnerTeam){
+  try{
+    const duration=Math.floor((Date.now()-G.matchStart)/1000);
+
+    const validMatch=
+      duration>=300 &&
+      G.movesCount>=20;
+
+    console.log("MATCH VALIDATION",{
+      validMatch,
+      duration,
+      moves:G.movesCount,
+      winner:winnerTeam
+    });
+
+  }catch(e){
+    console.error(e);
+  }
 }
 
 function renderGoal(){
@@ -390,7 +537,10 @@ function render(){
   else if(G.phase==="MENU")root.appendChild(renderMenu());
   else if(G.phase==="TUTORIAL")root.appendChild(renderTutorial());
   else if(G.phase==="SPECTATOR")root.appendChild(renderSpectator());
-  else if(G.phase==="LOBBY")root.appendChild(renderLobby());
+  else if(G.phase==="ONLINE_HOME")root.appendChild(renderOnlineHome());
+  else if(G.phase==="ONLINE_PUBLIC")root.appendChild(renderPublicRooms());
+  else if(G.phase==="ONLINE_PRIVATE")root.appendChild(renderLobby());
+  else if(G.phase==="RANKING")root.appendChild(renderRanking());
   else if(G.phase==="ONLINE_COACH")root.appendChild(renderCoach(G.myTeam,true));
   else if(G.phase==="ONLINE_WAIT_FM")root.appendChild(renderWaiting("Esperando formacion del rival..."));
   else if(G.phase==="ONLINE_PLACE")root.appendChild(renderOnlinePlacement());
@@ -401,6 +551,7 @@ function render(){
   else if(G.phase==="DEV_COACH_B")root.appendChild(renderCoachLocal(TB));
   else if(G.phase==="DEV_PLACE")root.appendChild(renderPlacementLocal());
   else if(G.phase==="DEV_GAME")root.appendChild(renderGameLocal());
+  else if(G.phase==="CPU_LEVEL")root.appendChild(renderCPULevel());
   else if(G.phase==="CPU_COACH")root.appendChild(renderCoachLocal(TA));
   else if(G.phase==="CPU_PLACE")root.appendChild(renderPlacementCPU());
   else if(G.phase==="CPU_GAME"){root.appendChild(renderGameLocal());if(G.curTeam===TB&&!G.over&&G.gameMode==="cpu"&&!G._cpuThinking){G._cpuThinking=true;setTimeout(()=>{G._cpuThinking=false;executeCPUTurn();},100);}}
@@ -512,12 +663,216 @@ function renderMenu(){
   }
 
   card.appendChild(mkMenuBtn("👥","1 VS 1","Mismo dispositivo","linear-gradient(135deg,#065f46,#022c22)","#10b981","#6ee7b7",()=>{G.gameMode="pvp";G.myTeam=null;G.phase="DEV_COACH_A";render();}));
-  card.appendChild(mkMenuBtn("🤖","1 VS CPU","Juega contra la máquina","linear-gradient(135deg,#1c3a5f,#0a1628)","#0ea5e9","#7dd3fc",()=>{G.gameMode="cpu";G.myTeam=null;G.phase="DEV_COACH_A";render();}));
-  card.appendChild(mkMenuBtn("🌐","ONLINE","Multijugador en línea","linear-gradient(135deg,#2d1b69,#0a1628)","#7c3aed","#c4b5fd",()=>{G.phase="LOBBY";render();}));
+  card.appendChild(mkMenuBtn("🤖","1 VS CPU","Juega contra la máquina","linear-gradient(135deg,#1c3a5f,#0a1628)","#0ea5e9","#7dd3fc",()=>{G.phase="CPU_LEVEL";render();}));
+  card.appendChild(mkMenuBtn("🌐","ONLINE","Multijugador en línea","linear-gradient(135deg,#2d1b69,#0a1628)","#7c3aed","#c4b5fd",()=>{G.phase="ONLINE_HOME";render();}));
   card.appendChild(mkMenuBtn("👁️","VER PARTIDA","Observar sin jugar","linear-gradient(135deg,#1c1f26,#0a1628)","#374151","#9ca3af",()=>{G.phase="SPECTATOR";render();}));
   card.appendChild(mkMenuBtn("📖","TUTORIAL","Aprende a jugar","linear-gradient(135deg,#1c1f26,#0a1628)","#374151","#9ca3af",()=>{G.prevPhase="MENU";G.phase="TUTORIAL";render();}));
 
   screen.appendChild(card);return screen;
+}
+
+
+
+function renderCPULevel(){
+  const screen=mkD({
+    minHeight:"100vh",
+    background:"#0a1628",
+    display:"flex",
+    alignItems:"center",
+    justifyContent:"center",
+    padding:"20px"
+  });
+
+  const card=mkD({
+    background:"#0f1c2e",
+    border:"2px solid #0ea5e9",
+    borderRadius:"18px",
+    padding:"28px",
+    width:"100%",
+    maxWidth:"420px",
+    display:"flex",
+    flexDirection:"column",
+    gap:"12px"
+  });
+
+  card.appendChild(mkT("🤖 SELECCIONA DIFICULTAD",{
+    fontSize:"18px",
+    fontWeight:"900",
+    color:"white",
+    letterSpacing:"2px",
+    textAlign:"center",
+    marginBottom:"8px"
+  }));
+
+  function levelBtn(title,desc,color,level){
+    const btn=document.createElement("button");
+
+    btn.style.cssText=`
+      width:100%;
+      background:${color};
+      border:2px solid rgba(255,255,255,0.2);
+      border-radius:14px;
+      padding:16px;
+      text-align:left;
+      color:white;
+      font-family:monospace;
+      cursor:pointer;
+    `;
+
+    btn.innerHTML=`
+      <div style="font-size:15px;font-weight:900;letter-spacing:1px">${title}</div>
+      <div style="font-size:10px;color:#d1d5db;margin-top:4px">${desc}</div>
+    `;
+
+    btn.onclick=()=>{
+      G.cpuLevel=level;
+      G.gameMode="cpu";
+      G.myTeam=null;
+      G.phase="DEV_COACH_A";
+      render();
+    };
+
+    return btn;
+  }
+
+  card.appendChild(levelBtn(
+    "🟢 FÁCIL",
+    "Movimientos simples y errores frecuentes",
+    "linear-gradient(135deg,#166534,#14532d)",
+    "easy"
+  ));
+
+  card.appendChild(levelBtn(
+    "🟡 NORMAL",
+    "Busca goles y roba ocasionalmente",
+    "linear-gradient(135deg,#a16207,#713f12)",
+    "normal"
+  ));
+
+  card.appendChild(levelBtn(
+    "🔴 DIFÍCIL",
+    "IA táctica agresiva y ofensiva",
+    "linear-gradient(135deg,#991b1b,#7f1d1d)",
+    "hard"
+  ));
+
+  card.appendChild(levelBtn(
+    "⚫ EXPERTO",
+    "Minimax profundo y máxima agresividad",
+    "linear-gradient(135deg,#111827,#000000)",
+    "expert"
+  ));
+
+  const back=document.createElement("button");
+  back.textContent="← Volver";
+  back.style.cssText="width:100%;padding:10px;background:transparent;border:1px solid #374151;border-radius:10px;color:#9ca3af;font-family:monospace;cursor:pointer";
+
+  back.onclick=()=>{
+    G.phase="MENU";
+    render();
+  };
+
+  card.appendChild(back);
+
+  screen.appendChild(card);
+
+  return screen;
+}
+
+
+
+function renderRanking(){
+  const screen=mkD({
+    minHeight:"100vh",
+    background:"#0a1628",
+    padding:"20px",
+    color:"white"
+  });
+
+  const card=mkD({
+    maxWidth:"520px",
+    margin:"0 auto",
+    background:"#0f1c2e",
+    border:"2px solid #f59e0b",
+    borderRadius:"18px",
+    padding:"24px"
+  });
+
+  card.appendChild(mkT("🏆 RANKING GLOBAL",{
+    fontSize:"22px",
+    fontWeight:"900",
+    textAlign:"center",
+    color:"#fbbf24",
+    marginBottom:"8px"
+  }));
+
+  card.appendChild(mkT(
+    "Próximamente conectado con Supabase Auth y ELO",
+    {
+      fontSize:"11px",
+      color:"#94a3b8",
+      textAlign:"center",
+      marginBottom:"18px"
+    }
+  ));
+
+  const mockPlayers=[
+    {name:"ElMatador77",elo:1450,wins:18},
+    {name:"KnightKing",elo:1380,wins:15},
+    {name:"ChessGoolBot",elo:1300,wins:12},
+    {name:"TorreMaster",elo:1260,wins:11},
+  ];
+
+  mockPlayers.forEach((p,i)=>{
+    const row=mkD({
+      display:"flex",
+      justifyContent:"space-between",
+      alignItems:"center",
+      background:"rgba(255,255,255,0.04)",
+      border:"1px solid rgba(255,255,255,0.08)",
+      borderRadius:"12px",
+      padding:"12px",
+      marginBottom:"10px"
+    });
+
+    const left=mkD({});
+    left.appendChild(mkT("#"+(i+1)+" · "+p.name,{
+      fontWeight:"900",
+      fontSize:"14px"
+    }));
+
+    left.appendChild(mkT(p.wins+" victorias",{
+      fontSize:"10px",
+      color:"#94a3b8",
+      marginTop:"2px"
+    }));
+
+    const elo=mkT(p.elo+" ELO",{
+      color:"#fbbf24",
+      fontWeight:"900",
+      fontSize:"14px"
+    });
+
+    row.appendChild(left);
+    row.appendChild(elo);
+
+    card.appendChild(row);
+  });
+
+  const back=document.createElement("button");
+  back.textContent="← Volver";
+  back.style.cssText="width:100%;padding:10px;margin-top:12px;background:transparent;border:1px solid #374151;border-radius:10px;color:#9ca3af;font-family:monospace;cursor:pointer";
+
+  back.onclick=()=>{
+    G.phase="ONLINE_HOME";
+    render();
+  };
+
+  card.appendChild(back);
+
+  screen.appendChild(card);
+
+  return screen;
 }
 
 // ── ESPECTADOR ────────────────────────────────────────────────────────────────
@@ -592,6 +947,263 @@ function subscribeSpectator(code){
     }).subscribe();
 }
 
+
+
+
+function renderOnlineHome(){
+  const screen=mkD({
+    minHeight:"100vh",
+    background:"#0a1628",
+    display:"flex",
+    alignItems:"center",
+    justifyContent:"center",
+    padding:"20px"
+  });
+
+  const card=mkD({
+    background:"#0f1c2e",
+    border:"2px solid #7c3aed",
+    borderRadius:"18px",
+    padding:"28px",
+    width:"100%",
+    maxWidth:"420px",
+    display:"flex",
+    flexDirection:"column",
+    gap:"14px"
+  });
+
+  card.appendChild(mkT("🌐 ONLINE",{fontSize:"22px",fontWeight:"900",color:"white",letterSpacing:"3px",textAlign:"center"}));
+
+  card.appendChild(mkT(
+    "Crea partidas públicas, privadas o únete a salas activas",
+    {
+      fontSize:"11px",
+      color:"#94a3b8",
+      textAlign:"center",
+      marginBottom:"10px",
+      lineHeight:"1.6"
+    }
+  ));
+
+  function makeBtn(title,sub,color,border,onclick){
+    const btn=document.createElement("button");
+    btn.style.cssText=`width:100%;background:${color};border:2px solid ${border};border-radius:14px;padding:18px;color:white;font-family:monospace;text-align:left;cursor:pointer`;
+    btn.innerHTML=`<div style="font-size:15px;font-weight:900;letter-spacing:2px">${title}</div>
+    <div style="font-size:10px;color:#cbd5e1;margin-top:4px">${sub}</div>`;
+    btn.onclick=onclick;
+    return btn;
+  }
+
+  card.appendChild(makeBtn(
+    "➕ CREAR SALA",
+    "Crea una partida y elige color",
+    "linear-gradient(135deg,#065f46,#022c22)",
+    "#10b981",
+    ()=>showCreateColorModal()
+  ));
+
+  card.appendChild(makeBtn(
+    "🌍 VER SALAS PÚBLICAS",
+    "Unirse a partidas abiertas",
+    "linear-gradient(135deg,#1e3a5f,#0a1628)",
+    "#3b82f6",
+    ()=>{G.phase="ONLINE_PUBLIC";render();}
+  ));
+
+  card.appendChild(makeBtn(
+    "🔒 SALA PRIVADA",
+    "Entrar con código",
+    "linear-gradient(135deg,#312e81,#111827)",
+    "#818cf8",
+    ()=>{G.phase="ONLINE_PRIVATE";render();}
+  ));
+
+  card.appendChild(makeBtn(
+    "🏆 RANKING",
+    "Ver mejores jugadores y estadísticas",
+    "linear-gradient(135deg,#92400e,#451a03)",
+    "#f59e0b",
+    ()=>{G.phase="RANKING";render();}
+  ));
+
+
+  const back=document.createElement("button");
+  back.textContent="← Volver";
+  back.style.cssText="width:100%;background:transparent;border:1px solid #374151;border-radius:10px;color:#6b7280;padding:10px;font-family:monospace;cursor:pointer";
+  back.onclick=()=>{G.phase="MENU";render();};
+  card.appendChild(back);
+
+  screen.appendChild(card);
+  return screen;
+}
+
+function showCreateColorModal(){
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:999999";
+
+  const card=document.createElement("div");
+  card.style.cssText="background:#0f1c2e;border:2px solid #7c3aed;border-radius:16px;padding:24px;width:320px;font-family:monospace";
+
+  const title=document.createElement("div");
+  title.textContent="ELIGE TU COLOR";
+  title.style.cssText="font-size:16px;font-weight:900;color:white;text-align:center;margin-bottom:18px";
+  card.appendChild(title);
+
+  function makeColorBtn(label,team,color){
+    const btn=document.createElement("button");
+    btn.textContent=label;
+    btn.style.cssText=`width:100%;padding:14px;margin-bottom:10px;background:${color};border:2px solid white;border-radius:12px;color:white;font-family:monospace;font-weight:900;cursor:pointer`;
+    btn.onclick=()=>{
+      document.body.removeChild(ov);
+      createOnlineRoom(team);
+    };
+    return btn;
+  }
+
+  card.appendChild(makeColorBtn("🔵 EQUIPO AZUL", "A", "#1d4ed8"));
+  card.appendChild(makeColorBtn("🔴 EQUIPO ROJO", "B", "#b91c1c"));
+
+  const cancel=document.createElement("button");
+  cancel.textContent="Cancelar";
+  cancel.style.cssText="width:100%;padding:10px;background:transparent;border:1px solid #374151;border-radius:10px;color:#9ca3af;font-family:monospace;cursor:pointer";
+  cancel.onclick=()=>document.body.removeChild(ov);
+
+  card.appendChild(cancel);
+  ov.appendChild(card);
+  document.body.appendChild(ov);
+}
+
+async function createOnlineRoom(team){
+  const code=Math.random().toString(36).substring(2,8).toUpperCase();
+
+  await sb.from("rooms").insert({
+    id:code,
+    player_a:team==="A"?"A":null,
+    player_b:team==="B"?"B":null,
+    status:"waiting",
+    is_public:true
+  });
+
+  await sb.from("game_state").insert({
+    room_id:code,
+    state:{phase:"lobby"},
+    updated_at:new Date().toISOString()
+  });
+
+  G.roomCode=code;
+  G.myTeam=team;
+  G.gameMode="online";
+
+  G.phase="ONLINE_COACH";
+  render();
+}
+
+async function renderPublicRooms(){
+  const screen=mkD({
+    minHeight:"100vh",
+    background:"#0a1628",
+    padding:"18px",
+    color:"white"
+  });
+
+  const title=mkT("🌍 SALAS PÚBLICAS",{
+    fontSize:"20px",
+    fontWeight:"900",
+    marginBottom:"16px",
+    textAlign:"center"
+  });
+
+  screen.appendChild(title);
+
+  const sub=mkT(
+    "Salas activas esperando jugador",
+    {
+      fontSize:"11px",
+      color:"#94a3b8",
+      textAlign:"center",
+      marginBottom:"16px"
+    }
+  );
+
+  screen.appendChild(sub);
+
+  const list=mkD({
+    display:"flex",
+    flexDirection:"column",
+    gap:"10px",
+    maxWidth:"500px",
+    margin:"0 auto"
+  });
+
+  const {data:rooms}=await sb
+    .from("rooms")
+    .select("*")
+    .eq("status","waiting")
+    .eq("is_public",true);
+
+  if(!rooms||rooms.length===0){
+    list.appendChild(mkT("No hay salas disponibles",{textAlign:"center",color:"#6b7280"}));
+  }else{
+    rooms.forEach(room=>{
+      const row=mkD({
+        background:"#111827",
+        border:"1px solid #374151",
+        borderRadius:"12px",
+        padding:"14px",
+        display:"flex",
+        justifyContent:"space-between",
+        alignItems:"center"
+      });
+
+      const info=mkD({});
+      info.appendChild(mkT("Sala "+room.id,{fontWeight:"900"}));
+      const createdAgo=Math.floor((Date.now()-new Date(room.created_at))/60000);
+
+      info.appendChild(mkT(
+        "⏳ Esperando rival · "+createdAgo+" min",
+        {
+          fontSize:"10px",
+          color:"#9ca3af"
+        }
+      ));
+
+      const btn=document.createElement("button");
+      btn.textContent="⚽ UNIRSE";
+      btn.style.cssText="background:#065f46;border:2px solid #10b981;border-radius:8px;color:white;padding:8px 14px;font-family:monospace;font-weight:900;cursor:pointer";
+
+      btn.onclick=async()=>{
+        await sb.from("rooms")
+          .update({
+            player_b:"B",
+            status:"ready"
+          })
+          .eq("id",room.id);
+
+        G.roomCode=room.id;
+        G.myTeam="B";
+        G.gameMode="online";
+        G.phase="ONLINE_COACH";
+        render();
+      };
+
+      row.appendChild(info);
+      row.appendChild(btn);
+
+      list.appendChild(row);
+    });
+  }
+
+  screen.appendChild(list);
+
+  const back=document.createElement("button");
+  back.textContent="← Volver";
+  back.style.cssText="display:block;margin:18px auto 0 auto;padding:10px 20px;background:transparent;border:1px solid #374151;border-radius:10px;color:#9ca3af;font-family:monospace;cursor:pointer";
+  back.onclick=()=>{G.phase="ONLINE_HOME";render();};
+
+  screen.appendChild(back);
+
+  return screen;
+}
 
 // ── LOBBY ─────────────────────────────────────────────────────────────────────
 function renderLobby(){
@@ -791,7 +1403,39 @@ function renderWaiting(msg){
   const emoji=mkD({fontSize:"40px",marginBottom:"12px"});emoji.textContent="⏳";card.appendChild(emoji);
   card.appendChild(mkT(msg,{fontSize:"15px",fontWeight:"900",color:"white",marginBottom:"12px",display:"block"}));
   card.appendChild(mkT("Sala: "+G.roomCode,{fontSize:"13px",color:"#7c3aed",fontWeight:"900",letterSpacing:"4px",display:"block",marginBottom:"8px"}));
-  card.appendChild(mkT("Eres Equipo "+G.myTeam+(G.myTeam===TA?" · Azul (arriba)":" · Rojo (abajo)"),{fontSize:"10px",color:"#9ca3af",display:"block"}));
+  const teamColor=G.myTeam===TA?"#3b82f6":"#ef4444";
+  const teamBg=G.myTeam===TA?"rgba(59,130,246,0.15)":"rgba(239,68,68,0.15)";
+
+  const badge=mkD({
+    background:teamBg,
+    border:"2px solid "+teamColor,
+    borderRadius:"12px",
+    padding:"12px",
+    marginTop:"10px"
+  });
+
+  badge.appendChild(mkT(
+    G.myTeam===TA?"🔵 EQUIPO AZUL":"🔴 EQUIPO ROJO",
+    {
+      fontSize:"14px",
+      fontWeight:"900",
+      color:teamColor,
+      textAlign:"center",
+      letterSpacing:"2px"
+    }
+  ));
+
+  badge.appendChild(mkT(
+    G.myTeam===TA?"Defiendes portería superior":"Defiendes portería inferior",
+    {
+      fontSize:"10px",
+      color:"#cbd5e1",
+      textAlign:"center",
+      marginTop:"4px"
+    }
+  ));
+
+  card.appendChild(badge);
   screen.appendChild(card);return screen;
 }
 
@@ -836,10 +1480,26 @@ function renderCoach(team,isOnline=false){
     const{data}=await sb.from("game_state").select("state").eq("room_id",G.roomCode).single();
     const prev=data?.state||{};
     const newState={...prev,[teamKey]:sel};
-    await sb.from("game_state").upsert({room_id:G.roomCode,state:newState,updated_at:new Date().toISOString()});
-    if(prev[otherKey]){
-      G.fmA=newState.fmA;G.fmB=newState.fmB;
-      G.phase="ONLINE_PLACE";render();
+    await sb.from("game_state").upsert({
+      room_id:G.roomCode,
+      state:newState,
+      updated_at:new Date().toISOString()
+    });
+
+    // Releer estado actualizado para evitar race condition online
+    const {data:fresh}=await sb
+      .from("game_state")
+      .select("state")
+      .eq("room_id",G.roomCode)
+      .single();
+
+    const latest=fresh?.state||{};
+
+    if(latest[otherKey]){
+      G.fmA=latest.fmA;
+      G.fmB=latest.fmB;
+      G.phase="ONLINE_PLACE";
+      render();
     } else {
       G.phase="ONLINE_WAIT_FM";render();
       const ch=sb.channel("fm:"+G.roomCode)
@@ -959,10 +1619,31 @@ function renderTopBar(isMyTurn){
   bar.appendChild(sA);
   // Center
   const center=mkD({display:"flex",flexDirection:"column",alignItems:"center",flex:"1",gap:"2px"});
-  if(G.roomCode){const rc=mkD({fontSize:"8px",color:"#7c3aed",fontWeight:"900",letterSpacing:"3px"});rc.textContent=G.roomCode;center.appendChild(rc);}
+  if(G.roomCode){
+    const rc=mkD({
+      fontSize:"8px",
+      color:"#7c3aed",
+      fontWeight:"900",
+      letterSpacing:"3px",
+      background:"rgba(124,58,237,0.15)",
+      border:"1px solid rgba(124,58,237,0.4)",
+      borderRadius:"6px",
+      padding:"2px 6px"
+    });
+
+    rc.textContent="🌐 "+G.roomCode;
+
+    center.appendChild(rc);
+  }
   const turnTxt=mkD({fontSize:"11px",fontWeight:"900",color:tc,letterSpacing:"1px"});
   if(isMyTurn!==undefined){turnTxt.textContent=isMyTurn?"● TU TURNO":"○ RIVAL";}
-  else{turnTxt.textContent=G.curTeam===TA?"● TURNO A":"● TURNO B";}
+  else{
+    if(G.gameMode==="cpu"&&G.curTeam===TB){
+      turnTxt.textContent="🤖 CPU · "+String(G.cpuLevel||"normal").toUpperCase();
+    }else{
+      turnTxt.textContent=G.curTeam===TA?"● TURNO A":"● TURNO B";
+    }
+  }
   center.appendChild(turnTxt);
   if(G.bonus){const b=mkD({fontSize:"8px",color:"#fbbf24",fontWeight:"700"});b.textContent="+BONUS";center.appendChild(b);}
   if(G.log.length>0&&G.log[0]){
@@ -976,7 +1657,14 @@ function renderTopBar(isMyTurn){
   sB.appendChild(mkT(G.score.B,{fontSize:"28px",fontWeight:"900",color:"#ef4444",lineHeight:"1"}));
   if(G.fmB)sB.appendChild(mkT(G.fmB.label||"",{fontSize:"7px",color:"#4b5563"}));
   bar.appendChild(sB);
-  return bar;
+  
+  // ONLINE TEAM BADGES
+  if(G.gameMode==="online"||G.roomCode){
+    sA.style.opacity=G.myTeam===TA?"1":"0.65";
+    sB.style.opacity=G.myTeam===TB?"1":"0.65";
+  }
+
+return bar;
 }
 
 
@@ -986,7 +1674,7 @@ function renderGame(){
   const wrap=mkD({height:"100vh",background:"#0a1628",display:"flex",flexDirection:"column",overflow:"hidden"});
   wrap.appendChild(renderTopBar(isMyTurn));
   if(G.over){
-    const w=G.score.A>=5?TA:TB;
+    const w=G.score.A>=3?TA:TB;
     const ov=mkD({textAlign:"center",padding:"10px",background:"#0f1c2e"});
     ov.appendChild(mkT("🏆 EQUIPO "+(w===TA?"AZUL":"ROJO")+" GANA!",{fontSize:"14px",color:"#fbbf24",fontWeight:"900"}));
     const btnR=document.createElement("button");
@@ -1142,7 +1830,7 @@ function renderGameLocal(){
   const wrap=mkD({height:"100vh",background:"#0a1628",display:"flex",flexDirection:"column",overflow:"hidden"});
   wrap.appendChild(renderTopBar(undefined));
   if(G.over){
-    const w=G.score.A>=5?TA:TB;
+    const w=G.score.A>=3?TA:TB;
     const ov=mkD({textAlign:"center",padding:"10px",background:"#0f1c2e"});
     ov.appendChild(mkT("🏆 EQUIPO "+(w===TA?"AZUL":"ROJO")+" GANA!",{fontSize:"14px",color:"#fbbf24",fontWeight:"900"}));
     const btnR=document.createElement("button");
@@ -1242,6 +1930,7 @@ function nextTurn(){
 }
 
 function execMove(pid,r,c){
+  G.movesCount++;
   const piece=G.pieces.find(p=>p.id===pid);if(!piece)return;
   const dest=pat(G.pieces,r,c);
   const myBall=piece.row===G.ball.row&&piece.col===G.ball.col;
@@ -1301,17 +1990,19 @@ function execMove(pid,r,c){
 }
 
 function execShot(cell){
+  G.movesCount++;
   G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;
   if(cell.isGoal){
       const azul=cell.row===TOP_GOAL&&GOAL_COLS.includes(cell.col);
     const scorer=azul?TB:TA,kTeam=azul?TA:TB;
     const msg=scorer!==G.curTeam?"Autogol! --> Equipo "+scorer:"⚽ GOL Equipo "+scorer;
     addLog(msg);G.score[scorer]++;
-    if(G.score[scorer]>=5){
+    if(G.score[scorer]>=3){
       G.over=true;const winMsg="Equipo "+scorer+" CAMPEON!";addLog(winMsg);
       if(G.myTeam)publishOnline({logMsg:winMsg});
       render();
-      showGoalCelebration(scorer,true,()=>render());return;
+      showWinnerCelebration(scorer);
+      return;
     }
     const resetOnline=()=>{
       const base=buildAll(G.fmA,G.fmB,kTeam);
@@ -1398,7 +2089,12 @@ function buildBoard(r0,r1,pieces=[],ball=null){
   return{wrap,cells};
 }
 
-const SYMS={P:"P",R:"R",T:"T",C:"C"};
+const SYMS={
+  P:"♔",
+  R:"♕",
+  T:"♖",
+  C:"♘"
+};
 function makePieceEl(team,type,id){
   const el=document.createElement("div");
   el.className=`piece ${team}${type==="C"?" knight":""}`;
@@ -1631,9 +2327,9 @@ const SCENES=[
     const demos=[
       {type:"R",team:"blue",r:7,c:4,label:"♛ REYNA — 3 casillas · 8 direcciones",color:"#93c5fd",
        moves:[[6,4],[5,4],[4,4],[8,4],[9,4],[10,4],[7,3],[7,2],[7,1],[7,5],[7,6],[7,7],[6,3],[5,2],[4,1],[6,5],[5,6],[4,7],[8,3],[9,2],[8,5],[9,6]],moveTo:[5,4]},
-      {type:"T",team:"blue",r:7,c:4,label:"♜ TORRE — 4 casillas · línea recta",color:"#60a5fa",
+      {type:"T",team:"blue",r:7,c:4,label:"♜ TORRE — 4 casillas siempre",color:"#60a5fa",
        moves:[[6,4],[5,4],[4,4],[3,4],[8,4],[9,4],[10,4],[11,4],[7,3],[7,2],[7,1],[7,5],[7,6],[7,7],[7,8]],moveTo:[7,8]},
-      {type:"C",team:"blue",r:7,c:4,label:"♞ CABALLO — Salta en L (3+1 ó 1+3)",color:"#34d399",
+      {type:"C",team:"blue",r:7,c:4,label:"♞ CABALLO — Movimiento y disparo en L",color:"#34d399",
        moves:[[4,3],[4,5],[10,3],[10,5],[6,1],[8,1],[6,7],[8,7]],moveTo:[4,5]},
       {type:"P",team:"blue",r:7,c:4,label:"♚ PORTERO — 1 casilla · 8 direcciones",color:"#fbbf24",
        moves:[[6,3],[6,4],[6,5],[7,3],[7,5],[8,3],[8,4],[8,5]],moveTo:[6,4]},
@@ -1734,13 +2430,13 @@ const SCENES=[
       },1500);
       TL(()=>loop(),4000);
     }
-    return{title:"♞ Caballo — Dos formas de robar",desc:"Roba al pasar (trayectoria) o al llegar (destino).\nSalta sobre cualquier pieza bloqueadora.",el:container,startLoop:()=>TL(loop,800)};
+    return{title:"♞ Caballo — Robo y disparo en L",desc:"Dispara y roba usando movimiento en L.\nSalta sobre cualquier pieza bloqueadora.",el:container,startLoop:()=>TL(loop,800)};
   },
 
   // 8 Final
   ()=>{
     const w=document.createElement("div");w.style.cssText="display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;max-width:300px";
-    [{icon:"1️⃣",text:"1 click = seleccionar / mover"},{icon:"2️⃣",text:"2 clicks = activar tiro"},{icon:"💪",text:"Roba el balón → turno BONUS"},{icon:"⚽",text:"5 goles = victoria"}].forEach(r=>{
+    [{icon:"1️⃣",text:"1 click = seleccionar / mover"},{icon:"2️⃣",text:"2 clicks = activar tiro"},{icon:"💪",text:"Roba el balón → turno BONUS"},{icon:"⚽",text:"3 goles = victoria"}].forEach(r=>{
       const row=document.createElement("div");row.style.cssText="display:flex;align-items:center;gap:10px;background:#0f1c2e;border:1px solid #1f2937;border-radius:10px;padding:10px 14px;width:100%";
       const ic=document.createElement("div");ic.style.fontSize="20px";ic.textContent=r.icon;
       const tx=document.createElement("div");tx.style.cssText="font-size:12px;color:#e5e7eb;font-weight:700";tx.textContent=r.text;
@@ -1761,19 +2457,38 @@ function showFullRules(){
   const ov=document.createElement("div");
   ov.style.cssText="position:fixed;top:0;left:0;right:0;bottom:0;background:#0a1628;z-index:9999;overflow-y:auto;font-family:monospace;padding:20px";
   const rules=[
-    {t:"🏟️ CAMPO",d:"Tablero 9×15. Portería Azul arriba (D-F fila 1). Portería Roja abajo (D-F fila 15)."},
-    {t:"⚽ OBJETIVO",d:"Anotar 5 goles. Primero en llegar gana."},
-    {t:"♚ PORTERO",d:"Mueve 1 casilla. Tira hasta 9 casillas saltando todo. Protegido en su área grande."},
-    {t:"♜ TORRE",d:"Hasta 4 casillas en línea recta. Con balón máximo 3."},
-    {t:"♞ CABALLO",d:"Salta en L (3+1 ó 1+3). Salta sobre piezas. Roba en trayectoria o destino."},
-    {t:"♛ REYNA",d:"Hasta 3 casillas en 8 direcciones. Con balón máximo 3."},
-    {t:"1️⃣ MOVER",d:"1 click selecciona. 2do click en celda destino = mover."},
-    {t:"2️⃣ TIRAR",d:"2 clicks en la pieza con balón activa tiro. 5 casillas (9 para portero)."},
-    {t:"💪 ROBO",d:"Lleva tu pieza al balón rival para robarlo. Ganas turno BONUS: mueve cualquier pieza."},
-    {t:"📤 DESPLAZAMIENTO",d:"Al robar, la pieza rival avanza 1 casilla alejándose de su portería."},
-    {t:"🥅 GOL",d:"Tira a celdas D-F de la portería rival. Autogol si entra en la tuya."},
-    {t:"🔄 SAQUE",d:"Tras gol, el equipo que recibió saca desde el centro."},
-  ];
+    {t:"⚽ OBJETIVO",d:"Anota 3 goles antes que el rival para ganar la partida."},
+
+    {t:"🏟️ CAMPO",d:"Tablero 9×15. Portería Azul arriba. Portería Roja abajo."},
+
+    {t:"♜ TORRE",d:"Se mueve hasta 4 casillas en línea recta. Mantiene movimiento completo con balón."},
+
+    {t:"♞ CABALLO",d:"Se mueve en L (3+1 ó 1+3). Salta piezas. También dispara en movimiento L."},
+
+    {t:"♛ REYNA",d:"Se mueve hasta 3 casillas en 8 direcciones."},
+
+    {t:"♚ PORTERO",d:"Se mueve 1 casilla. SOLO salta piezas al disparar. Puede disparar hasta 9 casillas."},
+
+    {t:"🎮 MOVIMIENTO",d:"1 click selecciona. 2do click mueve la pieza."},
+
+    {t:"🎯 DISPARO",d:"2 clicks sobre la misma pieza activan disparo. El 3er click dispara."},
+    {t:"🏃 MOVIMIENTO CON BALÓN",d:"Las piezas mantienen su movimiento completo aunque tengan el balón."},
+
+
+    {t:"💪 ROBO",d:"Lleva tu pieza hasta el balón rival para robarlo."},
+
+    {t:"📤 DESPLAZAMIENTO",d:"La pieza robada es desplazada automáticamente 1 casilla alejándose de su propia portería."},
+
+    {t:"⚡ BONUS",d:"Tras un robo obtienes un movimiento extra inmediato."},
+
+    {t:"🥅 GOL",d:"Marca en las casillas centrales de la portería rival. También existen autogoles."},
+
+    {t:"🔄 SAQUE",d:"Después de un gol, el equipo que recibió gol realiza el saque inicial."},
+
+    {t:"🌐 ONLINE",d:"Puedes crear salas públicas o privadas, elegir color y unirte a partidas online."},
+
+    {t:"🧠 ESTRATEGIA",d:"Usa Torres para control, Caballos para robos agresivos, Reynas para crear juego y Portero para distribución larga."}
+  ]
   const hdr=document.createElement("div");hdr.style.cssText="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px";
   const ttl=document.createElement("div");ttl.style.cssText="font-size:13px;font-weight:900;color:#10b981;letter-spacing:3px";ttl.textContent="📖 INSTRUCCIONES";
   const cls=document.createElement("button");cls.textContent="✕ Cerrar";
@@ -1825,34 +2540,92 @@ function tutInit(onClose){
   tutRenderScene(0);
 }
 
+
+
+function getCPUDepth(){
+  switch(G.cpuLevel){
+    case "easy": return 1;
+    case "normal": return 2;
+    case "hard": return 3;
+    case "expert": return 4;
+    default:return 2;
+  }
+}
+
 // ── CPU AI ────────────────────────────────────────────────────────────────────
+
 function evaluateBoard(pieces,ball){
   const hasBallB=pieces.find(p=>p.team===TB&&p.row===ball.row&&p.col===ball.col);
   const hasBallA=pieces.find(p=>p.team===TA&&p.row===ball.row&&p.col===ball.col);
+
   let score=0;
-  if(hasBallB)score+=300;
-  if(hasBallA)score-=300;
-  const distToOpp=ball.row;
-  const distToOwn=BOT_GOAL-ball.row;
-  score+=(BOT_GOAL-distToOpp)*8;
-  score-=(BOT_GOAL-distToOwn)*3;
-  if(ball.row===TOP_GOAL&&GOAL_COLS.includes(ball.col))score=10000;  // CPU scores
-  if(ball.row===BOT_GOAL&&GOAL_COLS.includes(ball.col))score=-10000; // own goal
+
+  // Posesión
+  if(hasBallB)score+=450;
+  if(hasBallA)score-=450;
+
+  // Distancia a portería rival
+  score+=(14-ball.row)*10;
+
+  // Bonus por avance ofensivo
+  pieces.forEach(p=>{
+    if(p.team===TB){
+      score+=(14-p.row)*3;
+    }else{
+      score-=p.row*2;
+    }
+  });
+
+  // Presión cerca del balón
   pieces.forEach(p=>{
     const dist=Math.abs(p.row-ball.row)+Math.abs(p.col-ball.col);
-    if(p.team===TB)score+=Math.max(0,10-dist)*5;
-    else score-=Math.max(0,10-dist)*3;
+
+    if(p.team===TB){
+      score+=Math.max(0,12-dist)*8;
+    }else{
+      score-=Math.max(0,12-dist)*4;
+    }
   });
-  pieces.forEach(p=>{
-    if(p.team===TB)score+=(BOT_GOAL-p.row)*2;
-    else score+=p.row*2;
-  });
+
+  // Tiros disponibles
   if(hasBallB){
     const shots=getShots(hasBallB,pieces,TB);
+
     const goalShots=shots.filter(s=>s.isGoal&&!s.isOwn);
-    score+=goalShots.length*500;
-    score+=shots.length*20;
+
+    score+=goalShots.length*1200;
+
+    // Caballo ofensivo
+    if(hasBallB.type==="C"){
+      score+=goalShots.length*700;
+    }
+
+    // Valorar tiros ofensivos
+    shots.forEach(s=>{
+      score+=(14-s.row)*6;
+    });
   }
+
+  // Robos posibles
+  pieces.filter(p=>p.team===TB).forEach(p=>{
+    const hb=p.row===ball.row&&p.col===ball.col;
+
+    const moves=getMoves({...p,hasBall:hb},pieces,0,ball);
+
+    moves.forEach(m=>{
+      if(m.steal)score+=260;
+
+      // Caballo agresivo
+      if(p.type==="C"&&m.steal){
+        score+=180;
+      }
+    });
+  });
+
+  // Goles
+  if(ball.row===TOP_GOAL&&GOAL_COLS.includes(ball.col))score=100000;
+  if(ball.row===BOT_GOAL&&GOAL_COLS.includes(ball.col))score=-100000;
+
   return score;
 }
 
@@ -1938,34 +2711,55 @@ function minimax(pieces,ball,depth,alpha,beta,maximizing){
   }
 }
 
+
 function getBestCPUMove(){
   const moves=getAllMoves(G.pieces,G.ball,TB);
+
   if(!moves.length)return null;
 
-  // Priority 1: direct goal shot
-  const goalShot=moves.find(m=>m.isShot&&m.isGoal&&!m.isOwn);
-  if(goalShot)return goalShot;
+  // EASY MODE
+  if(G.cpuLevel==="easy"){
+    return moves[Math.floor(Math.random()*moves.length)];
+  }
 
-  // Priority 2: if portero has ball, prioritize shooting or advancing
-  const ballHolder=G.pieces.find(p=>p.team===TB&&p.row===G.ball.row&&p.col===G.ball.col);
-  if(ballHolder&&ballHolder.type==="P"){
-    // Find best shot move for portero first
-    const porterShots=moves.filter(m=>m.pid===ballHolder.id&&m.isShot);
-    if(porterShots.length){
-      // Pick shot closest to opponent goal (row 0)
-      porterShots.sort((a,b)=>a.toR-b.toR);
-      return porterShots[0];
+  // PRIORIDAD 1: gol inmediato
+  const directGoal=moves.find(m=>m.isShot&&m.isGoal&&!m.isOwn);
+  if(directGoal)return directGoal;
+
+  // PRIORIDAD 2: robo inmediato
+  const stealMove=moves.find(m=>m.steal);
+  if(stealMove)return stealMove;
+
+  // PRIORIDAD 3: caballo ofensivo
+  const knightShot=moves.find(m=>{
+    const p=G.pieces.find(x=>x.id===m.pid);
+    return p&&p.type==="C"&&m.isShot;
+  });
+
+  if(knightShot)return knightShot;
+
+  // PRIORIDAD 4: minimax
+  let bestMove=null;
+  let bestScore=-Infinity;
+
+  for(const move of moves){
+    const future=applyMoveState(G.pieces,G.ball,move);
+
+    const val=minimax(
+      future.pieces,
+      future.ball,
+      getCPUDepth(),
+      -Infinity,
+      Infinity,
+      false
+    );
+
+    if(val>bestScore){
+      bestScore=val;
+      bestMove=move;
     }
   }
 
-  // Priority 3: minimax
-  let bestMove=null,bestScore=-Infinity;
-  for(const move of moves){
-    const{pieces:np,ball:nb}=applyMoveState(G.pieces,G.ball,move);
-    const val=minimax(np,nb,2,-Infinity,Infinity,false);
-    if(val>bestScore){bestScore=val;bestMove=move;}
-  }
-  // Fallback: pick first available move
   return bestMove||moves[0];
 }
 
