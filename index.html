@@ -2366,13 +2366,15 @@ function renderOnlinePlacement(){
     const myKey=G.myTeam===TA?"piecesA":"piecesB";
     const otherKey=G.myTeam===TA?"piecesB":"piecesA";
     const{data}=await sb.from("game_state").select("state").eq("room_id",G.roomCode).single();
-    const prev=data?.state||{};
+    let prev=data?.state||{};
+    if(typeof prev==="string")try{prev=JSON.parse(prev);}catch(e){prev={};}
     const newState={...prev,[myKey]:pieces};
     await sb.from("game_state").upsert({room_id:G.roomCode,state:newState,updated_at:new Date().toISOString()});
     if(prev[otherKey]){
-      G.pieces=[...newState.piecesA,...newState.piecesB];
+      G.pieces=[...(newState.piecesA||[]),...(newState.piecesB||[])];
+      if(!G.pieces.length){alert("Error: piezas no cargadas. Intenta de nuevo.");confirmBtn.disabled=false;confirmBtn.textContent="✅ CONFIRMAR POSICION";return;}
       G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
-      G.score={A:0,B:0};G.log=["Saque: Equipo A"];G.adv=0;G.bonus=false;G.over=false;
+      G.score={A:0,B:0};G.log=["Saque: Equipo A"];G.adv=0;G.bonus=false;G.over=false;G.stealerId=null;
       G.phase="ONLINE_GAME";subscribeOnline();render();
     } else {
       G.phase="ONLINE_WAIT_PLACE";render();
@@ -2383,9 +2385,9 @@ function renderOnlinePlacement(){
           if(typeof s==="string")try{s=JSON.parse(s);}catch(e){}
           if(!s||!s[otherKey]||!s[myKey])return;
           clearInterval(pollInterval);ch.unsubscribe();
-          G.pieces=[...s.piecesA,...s.piecesB];
+          G.pieces=[...(s.piecesA||[]),...(s.piecesB||[])];
           G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
-          G.score={A:0,B:0};G.log=["Saque: Equipo A"];G.adv=0;G.bonus=false;G.over=false;
+          G.score={A:0,B:0};G.log=["Saque: Equipo A"];G.adv=0;G.bonus=false;G.over=false;G.stealerId=null;
           G.phase="ONLINE_GAME";subscribeOnline();render();
         }).subscribe();
       // Polling fallback every 3s in case Realtime misses the event
@@ -2396,9 +2398,9 @@ function renderOnlinePlacement(){
         if(typeof s==="string")try{s=JSON.parse(s);}catch(e){}
         if(s&&s[otherKey]&&s[myKey]){
           clearInterval(pollInterval);ch.unsubscribe();
-          G.pieces=[...s.piecesA,...s.piecesB];
+          G.pieces=[...(s.piecesA||[]),...(s.piecesB||[])];
           G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
-          G.score={A:0,B:0};G.log=["Saque: Equipo A"];G.adv=0;G.bonus=false;G.over=false;
+          G.score={A:0,B:0};G.log=["Saque: Equipo A"];G.adv=0;G.bonus=false;G.over=false;G.stealerId=null;
           G.phase="ONLINE_GAME";subscribeOnline();render();
         }
       },3000);
