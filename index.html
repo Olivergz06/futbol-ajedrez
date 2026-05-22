@@ -2337,12 +2337,13 @@ function renderOnlinePlacement(){
   let pieces=defaultPieces(myFm,G.myTeam,TA);
   let drag=null;
   const myRows=G.myTeam===TA?A_ROWS:B_ROWS;
-  const wrap=mkD({minHeight:"100vh",background:"#0a1628",display:"flex",gap:"12px",padding:"12px",overflowX:"auto",alignItems:"flex-start"});
-  const side=mkD({display:"flex",flexDirection:"column",gap:"10px",minWidth:"180px"});
-  const info=mkD({background:"#0f1c2e",border:"2px solid #7c3aed",borderRadius:"12px",padding:"14px 16px"});
-  info.appendChild(mkT("TU COLOCACION",{fontSize:"9px",color:"#7c3aed",letterSpacing:"3px",marginBottom:"6px"}));
-  info.appendChild(mkT("Toca una pieza y luego la celda destino en tu mitad.",{fontSize:"10px",color:"#9ca3af",lineHeight:"1.8"}));
-  side.appendChild(info);
+  const wrap=mkD({height:"100vh",background:"#0a1628",display:"flex",flexDirection:"column",overflow:"hidden"});
+  const topBarP=mkD({flexShrink:"0",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 14px",background:"rgba(6,15,28,0.98)",borderBottom:"1px solid rgba(124,58,237,0.3)"});
+  const infoTxtP=mkD({flex:"1"});
+  infoTxtP.appendChild(mkT("COLOCACIÓN",{fontSize:"9px",color:"rgba(124,58,237,0.8)",letterSpacing:"3px",display:"block",marginBottom:"2px"}));
+  infoTxtP.appendChild(mkT("Toca una pieza y luego la celda destino en tu mitad",{fontSize:"9px",color:"rgba(255,255,255,0.4)",letterSpacing:"1px"}));
+  topBarP.appendChild(infoTxtP);
+  const side=mkD({});// dummy for confirmBtn append below
   const confirmBtn=document.createElement("button");
   confirmBtn.textContent="✅ CONFIRMAR POSICION";
   confirmBtn.style.cssText="width:100%;padding:12px;background:#064e3b;border:2px solid #10b981;border-radius:12px;color:white;font-size:11px;font-weight:900;cursor:pointer;font-family:monospace;letter-spacing:2px";
@@ -2361,23 +2362,39 @@ function renderOnlinePlacement(){
       G.phase="ONLINE_GAME";subscribeOnline();render();
     } else {
       G.phase="ONLINE_WAIT_PLACE";render();
-      const ch=sb.channel("place:"+G.roomCode)
-        .on("postgres_changes",{event:"*",schema:"public",table:"game_state",filter:"room_id=eq."+G.roomCode},payload=>{
+      // Realtime + polling fallback
+      const ch=sb.channel("place:"+G.roomCode+":"+Date.now())
+        .on("postgres_changes",{event:"UPDATE",schema:"public",table:"game_state",filter:"room_id=eq."+G.roomCode},payload=>{
           const s=payload.new?.state;
           if(!s||!s[otherKey]||!s[myKey])return;
-          ch.unsubscribe();
+          clearInterval(pollInterval);ch.unsubscribe();
           G.pieces=[...s.piecesA,...s.piecesB];
           G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
           G.score={A:0,B:0};G.log=["Saque: Equipo A"];G.adv=0;G.bonus=false;G.over=false;
           G.phase="ONLINE_GAME";subscribeOnline();render();
         }).subscribe();
+      // Polling fallback every 3s in case Realtime misses the event
+      const pollInterval=setInterval(async()=>{
+        if(G.phase!=="ONLINE_WAIT_PLACE"){clearInterval(pollInterval);ch.unsubscribe();return;}
+        const{data}=await sb.from("game_state").select("state").eq("room_id",G.roomCode).single();
+        const s=data?.state;
+        if(s&&s[otherKey]&&s[myKey]){
+          clearInterval(pollInterval);ch.unsubscribe();
+          G.pieces=[...s.piecesA,...s.piecesB];
+          G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
+          G.score={A:0,B:0};G.log=["Saque: Equipo A"];G.adv=0;G.bonus=false;G.over=false;
+          G.phase="ONLINE_GAME";subscribeOnline();render();
+        }
+      },3000);
     }
   };
-  side.appendChild(confirmBtn);wrap.appendChild(side);
+  confirmBtn.style.cssText="padding:9px 18px;background:linear-gradient(135deg,#7c3aed,#4c1d95);border:none;border-radius:8px;color:white;font-size:11px;font-weight:900;cursor:pointer;font-family:'Oswald',sans-serif;letter-spacing:2px;white-space:nowrap;flex-shrink:0;margin-left:12px";
+  topBarP.appendChild(confirmBtn);wrap.appendChild(topBarP);
+  const fieldAreaP=mkD({flex:"1",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",paddingTop:"6px",overflow:"hidden"});
 
   const fw=mkD({display:"flex",flexDirection:"column"});
   const fr=mkD({display:"flex"});
-  const fc=mkD({position:"relative",border:"3px solid #1f6b3d",borderRadius:"4px",overflow:"hidden",boxShadow:"0 0 30px rgba(0,150,60,0.3)"});
+  const fc=mkD({position:"relative",border:"1px solid rgba(201,168,76,0.3)",borderRadius:"4px",overflow:"hidden",boxShadow:"0 8px 40px rgba(0,0,0,0.7)"});
   fc.appendChild(makeSVG());
   const grid=document.createElement("div");
   grid.style.cssText=`display:grid;grid-template-columns:repeat(${COLS},${CS}px);grid-template-rows:repeat(${ROWS},${CS}px);position:relative;z-index:2`;
@@ -2421,7 +2438,7 @@ function renderOnlinePlacement(){
   fr.appendChild(rl);fw.appendChild(fr);
   const cl=mkD({display:"flex",marginTop:"2px"});
   COL_LABELS.forEach(l=>{const lb=mkD({width:CS+"px",textAlign:"center",fontSize:"8px",color:"rgba(255,255,255,0.35)"});lb.textContent=l;cl.appendChild(lb);});
-  fw.appendChild(cl);wrap.appendChild(fw);return wrap;
+  fw.appendChild(cl);fieldArea.appendChild(fw);wrap.appendChild(fieldArea);return wrap;
 }
 
 // ── TOP BAR ───────────────────────────────────────────────────────────────────
@@ -2657,23 +2674,33 @@ function renderCoachLocal(team){
 function renderPlacementLocal(){
   let pieces=G.placementPieces||buildAll(G.fmA,G.fmB,TA);
   let drag=null;
-  const wrap=mkD({minHeight:"100vh",background:"#0a1628",display:"flex",gap:"12px",padding:"12px",overflowX:"auto",alignItems:"flex-start"});
-  const side=mkD({display:"flex",flexDirection:"column",gap:"10px",minWidth:"180px"});
-  const info=mkD({background:"#0f1c2e",border:"2px solid #374151",borderRadius:"12px",padding:"14px 16px"});
-  info.appendChild(mkT("COLOCACION",{fontSize:"9px",color:"#4b5563",letterSpacing:"3px",marginBottom:"6px"}));
-  info.appendChild(mkT("Toca una pieza y luego la celda destino.",{fontSize:"10px",color:"#9ca3af",lineHeight:"1.8"}));
-  side.appendChild(info);
+  const wrap=mkD({height:"100vh",background:"#0a1628",display:"flex",flexDirection:"column",overflow:"hidden"});
+
+  // ── Top bar with instructions + start button ──
+  const topBar=mkD({
+    flexShrink:"0",display:"flex",alignItems:"center",justifyContent:"space-between",
+    padding:"8px 14px",background:"rgba(6,15,28,0.98)",
+    borderBottom:"1px solid rgba(201,168,76,0.15)"
+  });
+  const infoTxt=mkD({flex:"1"});
+  infoTxt.appendChild(mkT("COLOCACIÓN",{fontSize:"9px",color:"rgba(201,168,76,0.6)",letterSpacing:"3px",display:"block",marginBottom:"2px"}));
+  infoTxt.appendChild(mkT("Toca una pieza y luego la celda destino",{fontSize:"9px",color:"rgba(255,255,255,0.4)",letterSpacing:"1px"}));
+  topBar.appendChild(infoTxt);
+
   const startBtn=document.createElement("button");
   startBtn.textContent="⚽ COMENZAR";
-  startBtn.style.cssText="width:100%;padding:12px;background:#064e3b;border:2px solid #10b981;border-radius:12px;color:white;font-size:12px;font-weight:900;cursor:pointer;font-family:monospace;letter-spacing:3px";
+  startBtn.style.cssText="padding:9px 18px;background:linear-gradient(135deg,#C9A84C,#8B6914);border:none;border-radius:8px;color:#050C18;font-size:11px;font-weight:900;cursor:pointer;font-family:'Oswald',sans-serif;letter-spacing:2px;white-space:nowrap;flex-shrink:0;margin-left:12px";
   startBtn.onclick=()=>{
     G.pieces=JSON.parse(JSON.stringify(pieces));
     G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
     G.score={A:0,B:0};G.log=["Saque: Equipo A"];G.adv=0;G.bonus=false;G.over=false;G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;
     G.phase=G.gameMode==="cpu"?"CPU_GAME":"DEV_GAME";render();
   };
-  side.appendChild(startBtn);
-  wrap.appendChild(side);
+  topBar.appendChild(startBtn);
+  wrap.appendChild(topBar);
+
+  // ── Field area (centered, full remaining height) ──
+  const fieldArea=mkD({flex:"1",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",paddingTop:"6px",overflow:"hidden"});
   const fw=mkD({display:"flex",flexDirection:"column"});
   const fr=mkD({display:"flex"});
   const fc=mkD({position:"relative",border:"3px solid #1f6b3d",borderRadius:"4px",overflow:"hidden"});
@@ -2723,7 +2750,7 @@ function renderPlacementLocal(){
   fr.appendChild(rl);fw.appendChild(fr);
   const cl=mkD({display:"flex",marginTop:"2px"});
   COL_LABELS.forEach(l=>{const lb=mkD({width:CS+"px",textAlign:"center",fontSize:"8px",color:"rgba(255,255,255,0.35)"});lb.textContent=l;cl.appendChild(lb);});
-  fw.appendChild(cl);wrap.appendChild(fw);return wrap;
+  fw.appendChild(cl);fieldAreaP.appendChild(fw);wrap.appendChild(fieldAreaP);return wrap;
 }
 
 function renderGameLocal(){
