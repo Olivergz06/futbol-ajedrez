@@ -2254,6 +2254,20 @@ function renderWaiting(msg){
   ));
 
   card.appendChild(badge);
+
+  // Cancel button
+  const cancelBtn=document.createElement("button");
+  cancelBtn.textContent="✕ Cancelar";
+  cancelBtn.style.cssText="margin-top:16px;background:transparent;border:1px solid #374151;border-radius:8px;color:#6b7280;padding:8px 20px;cursor:pointer;font-family:monospace;font-size:10px;letter-spacing:2px";
+  cancelBtn.onclick=async()=>{
+    if(G.roomCode){
+      await sb.from("game_state").delete().eq("room_id",G.roomCode);
+      await sb.from("rooms").delete().eq("id",G.roomCode);
+    }
+    G.phase="MENU";render();
+  };
+  card.appendChild(cancelBtn);
+
   screen.appendChild(card);return screen;
 }
 
@@ -2365,7 +2379,8 @@ function renderOnlinePlacement(){
       // Realtime + polling fallback
       const ch=sb.channel("place:"+G.roomCode+":"+Date.now())
         .on("postgres_changes",{event:"UPDATE",schema:"public",table:"game_state",filter:"room_id=eq."+G.roomCode},payload=>{
-          const s=payload.new?.state;
+          let s=payload.new?.state;
+          if(typeof s==="string")try{s=JSON.parse(s);}catch(e){}
           if(!s||!s[otherKey]||!s[myKey])return;
           clearInterval(pollInterval);ch.unsubscribe();
           G.pieces=[...s.piecesA,...s.piecesB];
@@ -2377,7 +2392,8 @@ function renderOnlinePlacement(){
       const pollInterval=setInterval(async()=>{
         if(G.phase!=="ONLINE_WAIT_PLACE"){clearInterval(pollInterval);ch.unsubscribe();return;}
         const{data}=await sb.from("game_state").select("state").eq("room_id",G.roomCode).single();
-        const s=data?.state;
+        let s=data?.state;
+        if(typeof s==="string")try{s=JSON.parse(s);}catch(e){}
         if(s&&s[otherKey]&&s[myKey]){
           clearInterval(pollInterval);ch.unsubscribe();
           G.pieces=[...s.piecesA,...s.piecesB];
@@ -3896,6 +3912,40 @@ function showLogPanel(){
   // Dismiss on backdrop click
   panel.addEventListener("click",e=>{if(e.target===panel)panel.remove();});
   document.body.appendChild(panel);
+}
+
+
+// ── ONLINE SYNC ───────────────────────────────────────────────────────────────
+function subscribeOnline(){
+  if(G.onlineChannel){sb.removeChannel(G.onlineChannel);}
+  G.onlineChannel=sb.channel("game:"+G.roomCode)
+    .on("postgres_changes",{event:"*",schema:"public",table:"game_state",filter:"room_id=eq."+G.roomCode},payload=>{
+      let s=payload.new?.state;
+      if(typeof s==="string")try{s=JSON.parse(s);}catch(e){}
+      if(!s||s.movedBy===G.myTeam)return;
+      if(s.pieces)G.pieces=s.pieces;
+      if(s.ball)G.ball=s.ball;
+      if(s.curTeam)G.curTeam=s.curTeam;
+      if(s.score)G.score=s.score;
+      if(s.adv!=null)G.adv=s.adv;
+      if(s.bonus!=null)G.bonus=s.bonus;
+      if(s.stealerId!=null)G.stealerId=s.stealerId;
+      if(s.over!=null)G.over=s.over;
+      if(s.kickoff!=null)G.kickoff=s.kickoff;
+      if(s.logMsg)addLog(s.logMsg);
+      G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;
+      if(G.phase==="ONLINE_GAME")render();
+    }).subscribe();
+}
+
+async function publishOnline(extra={}){
+  const state={
+    pieces:G.pieces,ball:G.ball,curTeam:G.curTeam,score:G.score,
+    adv:G.adv,bonus:G.bonus,stealerId:G.stealerId,kickoff:G.kickoff,
+    over:G.over,movedBy:G.myTeam,...extra,
+    updated_at:new Date().toISOString()
+  };
+  await sb.from("game_state").upsert({room_id:G.roomCode,state,updated_at:new Date().toISOString()});
 }
 
 
