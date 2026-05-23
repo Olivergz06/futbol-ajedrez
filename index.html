@@ -2840,6 +2840,8 @@ function renderCell(r,c,isMyTurn){
 
 function clickCell(r,c){
   if(G.over)return;
+  // Online mode: block if not your turn
+  if(G.myTeam&&G.curTeam!==G.myTeam)return;
   const cp=pat(G.pieces,r,c);
   const ibc=G.ball.row===r&&G.ball.col===c;
   if(G.clickCt===2){
@@ -3927,6 +3929,12 @@ function showLogPanel(){
 // ── ONLINE SYNC ───────────────────────────────────────────────────────────────
 function subscribeOnline(){
   if(G.onlineChannel){sb.removeChannel(G.onlineChannel);}
+  // Keepalive: ping every 30s to prevent Realtime timeout
+  if(G._keepalive)clearInterval(G._keepalive);
+  G._keepalive=setInterval(()=>{
+    if(G.phase!=="ONLINE_GAME"){clearInterval(G._keepalive);return;}
+    if(G.onlineChannel)G.onlineChannel.send({type:"broadcast",event:"ping",payload:{}});
+  },30000);
   G.onlineChannel=sb.channel("game:"+G.roomCode)
     .on("postgres_changes",{event:"*",schema:"public",table:"game_state",filter:"room_id=eq."+G.roomCode},payload=>{
       let s=payload.new?.state;
