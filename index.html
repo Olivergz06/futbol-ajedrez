@@ -2716,10 +2716,17 @@ function renderPlacementLocal(){
   startBtn.textContent="⚽ COMENZAR";
   startBtn.style.cssText="padding:9px 18px;background:linear-gradient(135deg,#C9A84C,#8B6914);border:none;border-radius:8px;color:#050C18;font-size:11px;font-weight:900;cursor:pointer;font-family:'Oswald',sans-serif;letter-spacing:2px;white-space:nowrap;flex-shrink:0;margin-left:12px";
   startBtn.onclick=()=>{
-    G.pieces=JSON.parse(JSON.stringify(pieces));
-    G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
-    G.score={A:0,B:0};G.log=["Saque: Equipo A"];G.adv=0;G.bonus=false;G.over=false;G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;
-    G.phase=G.gameMode==="cpu"?"CPU_GAME":"DEV_GAME";render();
+    try{
+      G.pieces=JSON.parse(JSON.stringify(pieces));
+      G.ball={row:CY,col:CX};G.curTeam=TA;G.kickoff=true;
+      G.score={A:0,B:0};G.log=["Saque: Equipo A"];G.adv=0;G.bonus=false;G.over=false;G.sel=null;G.moves=[];G.shots=[];G.clickCt=0;
+      G.stealerId=null;G.stealerDir={dr:1,dc:0};G.gameMode=G.gameMode||"pvp";
+      G.phase=G.gameMode==="cpu"?"CPU_GAME":"DEV_GAME";
+      render();
+    }catch(e){
+      alert("Error al iniciar: "+e.message);
+      console.error(e);
+    }
   };
   topBar.appendChild(startBtn);
   wrap.appendChild(topBar);
@@ -2780,6 +2787,11 @@ function renderPlacementLocal(){
 
 function renderGameLocal(){
   const wrap=mkD({height:"100vh",background:"#0a1628",display:"flex",flexDirection:"column",overflow:"hidden",alignItems:"center",justifyContent:"flex-start"});
+  // DEBUG: show state
+  const dbg=document.createElement("div");
+  dbg.style.cssText="position:fixed;top:0;left:0;right:0;background:#ef4444;color:white;padding:6px;font-size:9px;font-family:monospace;z-index:99999;text-align:center";
+  dbg.textContent="pieces:"+G.pieces.length+" phase:"+G.phase+" fmA:"+(G.fmA?G.fmA.T+"-"+G.fmA.C+"-"+G.fmA.R:"null")+" fmB:"+(G.fmB?G.fmB.T+"-"+G.fmB.C+"-"+G.fmB.R:"null");
+  document.body.appendChild(dbg);setTimeout(()=>dbg.remove(),5000);
   wrap.appendChild(renderTopBar(undefined));
   if(G.over){
     const w=G.score.A>=3?TA:TB;
