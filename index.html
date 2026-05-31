@@ -2423,6 +2423,7 @@ function renderOnlinePlacement(){
   fc.appendChild(makeSVG());
   const grid=document.createElement("div");
   grid.style.cssText=`display:grid;grid-template-columns:repeat(${COLS},${CS}px);grid-template-rows:repeat(${ROWS},${CS}px);position:relative;z-index:2`;
+  let _px=0,_py=0,_mv=false;
   function drawP(){
     grid.innerHTML="";
     for(let r=0;r<ROWS;r++){for(let c=0;c<COLS;c++){
@@ -2440,7 +2441,6 @@ function renderOnlinePlacement(){
         const dot=mkD({width:"8px",height:"8px",borderRadius:"50%",background:"rgba(251,191,36,0.7)"});cell.appendChild(dot);
       }
       // Touch support
-      let _px=0,_py=0,_mv=false;
       cell.addEventListener("pointerdown",e=>{_px=e.clientX;_py=e.clientY;_mv=false;},{passive:true});
       cell.addEventListener("pointermove",e=>{if(Math.abs(e.clientX-_px)>8||Math.abs(e.clientY-_py)>8)_mv=true;},{passive:true});
       cell.addEventListener("pointerup",e=>{
@@ -2759,7 +2759,6 @@ function renderPlacementLocal(){
       } else if(isTarget){
         const dot=mkD({width:"8px",height:"8px",borderRadius:"50%",background:"rgba(251,191,36,0.7)"});cell.appendChild(dot);
       }
-      let _px=0,_py=0,_mv=false;
       cell.addEventListener("pointerdown",e=>{_px=e.clientX;_py=e.clientY;_mv=false;},{passive:true});
       cell.addEventListener("pointermove",e=>{if(Math.abs(e.clientX-_px)>8||Math.abs(e.clientY-_py)>8)_mv=true;},{passive:true});
       cell.addEventListener("pointerup",e=>{
@@ -2818,6 +2817,7 @@ function renderCell(r,c,isMyTurn){
   if(isShot&&isShot.isGoal) cell.style.background="rgba(239,68,68,0.25)";
   else if(isShot&&isShot.isOwn) cell.style.background="rgba(37,99,235,0.2)";
   else if(isShot) cell.style.background="rgba(234,88,12,0.18)";
+  else if(isMove&&isBall) cell.style.boxShadow="inset 0 0 0 2px rgba(234,179,8,0.9), inset 0 0 12px rgba(234,179,8,0.3)";
   else if(isSel) cell.style.boxShadow="inset 0 0 0 2px rgba(255,255,255,0.3)";
   if(isBall&&!piece){const b=mkD({position:"absolute",inset:"0",display:"flex",alignItems:"center",justifyContent:"center",zIndex:"6",fontSize:"22px"});b.textContent="⚽";cell.appendChild(b);}
   if(isMove&&!piece&&!isBall){const d=document.createElement("div");d.className="dot-move";cell.appendChild(d);}
